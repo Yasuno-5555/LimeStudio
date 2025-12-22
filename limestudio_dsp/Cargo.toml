@@ -1,0 +1,11 @@
+[package]
+name = "limestudio_dsp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+limestudio_core = { path = "../limestudio_core" }
+rustfft = "6.2"
+num-complex = "0.4"
+rayon = "1.10"
+ringbuf = "0.3"

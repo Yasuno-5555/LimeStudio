@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "limestudio_core",
+    "limestudio_dsp",
+    "limestudio_plugin",
+    "basic_thru",
+]
+resolver = "2"

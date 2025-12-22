@@ -1,0 +1,459 @@
+use rustfft::{Fft, FftPlanner};
+use num_complex::{Complex, Complex64};
+use std::sync::Arc;
+use rayon::prelude::*;
+use crate::wavelets::MotherWavelet;
+
+/// 1. Analysis Stage: 入力のFFTを担当 (Stateless-ish)
+pub struct SpectralAnalyzer {
+    fft: Arc<dyn Fft<f64>>,
+    fft_size: usize,
+    
+    // Scratch & Output (Reuse allocation)
+    fft_input: Vec<Complex64>,
+    fft_scratch: Vec<Complex64>,
+    
+    // Window function
+    window: Vec<f64>,
+}
+
+impl SpectralAnalyzer {
+    pub fn new(fft_size: usize, _hop_size: usize, planner: &mut FftPlanner<f64>) -> Self {
+        let fft = planner.plan_fft_forward(fft_size);
+        
+        // Hann window
+        let window = (0..fft_size).map(|i| {
+            0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / (fft_size as f64 - 1.0)).cos())
+        }).collect();
+
+        Self {
+            fft,
+            fft_size,
+            fft_input: vec![Complex64::zero(); fft_size],
+            fft_scratch: vec![Complex64::zero(); fft_size],
+            window,
+        }
+    }
+
+    /// 固定長ブロックを受け取り、スペクトルを計算して返す
+    pub fn compute_spectrum(&mut self, input: &[f32]) -> Vec<Complex64> {
+        // Assert input length?
+        let len = input.len().min(self.fft_size);
+        
+        // Windowing & Copy
+        for i in 0..len {
+            self.fft_input[i] = Complex::new(input[i] as f64 * self.window[i], 0.0);
+        }
+        for i in len..self.fft_size {
+            self.fft_input[i] = Complex64::zero();
+        }
+
+        // FFT
+        self.fft.process_with_scratch(&mut self.fft_input, &mut self.fft_scratch);
+
+        self.fft_input.clone() // TODO: Avoid clone by returning slice or reference if possible, but lifecycle is tricky
+    }
+}
+
+/// 2. Synthesis Stage: 特定のスケールの再構成 (IFFT) を担当 (No OLA, just IFFT block)
+pub struct ScaleSynthesizer {
+    ifft: Arc<dyn Fft<f64>>,
+    fft_size: usize,
+    
+    // Wavelet Kernel
+    pub kernel: Vec<Complex64>,
+    
+    // Scratch
+    ifft_buffer: Vec<Complex64>,
+    ifft_scratch: Vec<Complex64>,
+    
+    // Output Buffer (Reused)
+    pub time_output: Vec<f32>,
+}
+
+impl ScaleSynthesizer {
+    pub fn new(fft_size: usize, _hop_size: usize, planner: &mut FftPlanner<f64>, kernel: Vec<Complex64>) -> Self {
+        let ifft = planner.plan_fft_inverse(fft_size);
+        
+        Self {
+            ifft,
+            fft_size,
+            kernel,
+            ifft_buffer: vec![Complex64::zero(); fft_size],
+            ifft_scratch: vec![Complex64::zero(); fft_size],
+            time_output: vec![0.0; fft_size],
+        }
+    }
+
+    /// スペクトルを受け取り、カーネル乗算 -> IFFT して時間領域ブロックを内部バッファに出力する
+    pub fn compute_block(&mut self, spectrum: &[Complex64], gain: f64) {
+        // 1. Kernel Multiplication
+        for (i, &bin) in spectrum.iter().enumerate() {
+            self.ifft_buffer[i] = bin * self.kernel[i] * gain;
+        }
+
+        // 2. IFFT
+        self.ifft.process_with_scratch(&mut self.ifft_buffer, &mut self.ifft_scratch);
+
+        // 3. Convert to Real
+        let scale = 1.0 / self.fft_size as f64; 
+        
+        for i in 0..self.fft_size {
+            self.time_output[i] = (self.ifft_buffer[i].re * scale) as f32;
+        }
+    }
+}
+
+use crate::utils::Smoother;
+use crate::monitor::SpectrumMonitorSender;
+
+/// Main Processor (Block based)
+pub struct WaveletProcessor {
+    analyzer: SpectralAnalyzer,
+    synthesizers: Vec<ScaleSynthesizer>,
+    
+    // Parameters
+    scales: Vec<f64>,
+    smoothers: Vec<Smoother>,
+    
+    // Visualizer
+    monitor_sender: Option<SpectrumMonitorSender>,
+    
+    fft_size: usize,
+    hop_size: usize,
+    sample_rate: f64,
+}
+
+impl WaveletProcessor {
+    pub fn new<W: MotherWavelet>(
+        sample_rate: f64,
+        fft_size: usize,
+        hop_size: usize,
+        num_scales: usize,
+        mother_wavelet: &W
+    ) -> Self {
+        let mut planner = FftPlanner::new();
+        let analyzer = SpectralAnalyzer::new(fft_size, hop_size, &mut planner);
+        
+        // Scale Setup
+        let min_freq = 20.0;
+        let max_freq = sample_rate / 2.0;
+        let mut scales = Vec::with_capacity(num_scales);
+        
+        for i in 0..num_scales {
+            let p = i as f64 / (num_scales - 1) as f64;
+            let freq = max_freq * (min_freq / max_freq).powf(p);
+            scales.push(freq);
+        }
+
+        // Kernel Generation & Normalization
+        let mut kernels: Vec<Vec<Complex64>> = Vec::with_capacity(num_scales);
+        let mut freq_sum = vec![0.0; fft_size];
+
+        for s_idx in 0..num_scales {
+            let freq_target = scales[s_idx];
+            let w0 = 6.0; 
+            let scale = w0 / (2.0 * std::f64::consts::PI * freq_target / sample_rate);
+            
+            let mut kernel = vec![Complex64::zero(); fft_size];
+            for k in 0..fft_size {
+                let omega = if k <= fft_size / 2 {
+                    k as f64 / fft_size as f64 * 2.0 * std::f64::consts::PI
+                } else {
+                    (k as f64 - fft_size as f64) / fft_size as f64 * 2.0 * std::f64::consts::PI
+                };
+                
+                let amp = mother_wavelet.frequency_domain(omega, scale); 
+                kernel[k] = Complex64::new(amp, 0.0);
+                freq_sum[k] += amp; 
+            }
+            kernels.push(kernel);
+        }
+
+        // Apply Normalization
+        for k in 0..fft_size {
+            if freq_sum[k] > 1e-6 {
+                let norm_factor = 1.0 / freq_sum[k];
+                for s_idx in 0..num_scales {
+                    kernels[s_idx][k] *= norm_factor;
+                }
+            }
+        }
+
+        let synthesizers = kernels.into_iter()
+            .map(|k| ScaleSynthesizer::new(fft_size, hop_size, &mut planner, k))
+            .collect();
+            
+        // Initialize smoothers with 1.0 (Unity Gain)
+        // Ramp time: 20ms typically good for gain
+        let smoothers = (0..num_scales)
+            .map(|_| Smoother::new(1.0, sample_rate / hop_size as f64, 20.0)) // Update rate is Block Rate!
+            .collect();
+
+        Self {
+            analyzer,
+            synthesizers,
+            scales,
+            smoothers,
+            monitor_sender: None,
+            fft_size,
+            hop_size,
+            sample_rate,
+        }
+    }
+
+    pub fn set_gain(&mut self, scale_idx: usize, gain: f64) {
+        if scale_idx < self.smoothers.len() {
+            self.smoothers[scale_idx].set_target(gain as f32);
+        }
+    }
+    
+    pub fn set_monitor(&mut self, sender: SpectrumMonitorSender) {
+        self.monitor_sender = Some(sender);
+    }
+    
+    pub fn latency(&self) -> u32 {
+        (self.fft_size - self.hop_size) as u32
+    }
+    
+    /// 固定長の入力ブロック処理し、固定長の出力ブロックを返す (OLAなし)
+    /// input: equal to fft_size
+    /// output: equal to fft_size (caller must size it correctly)
+    pub fn process_block(&mut self, input: &[f32], output: &mut [f32]) {
+        // 1. Analysis
+        let spectrum = self.analyzer.compute_spectrum(input);
+
+        // 2. Synthesis (Parallel Compute)
+        // Collect current gains from smoothers
+        // Note: Smoother operates on block rate, so we call next() once per block.
+        // We collect gains into a temporary vector to pass to par_iter
+        
+        let current_gains: Vec<f64> = self.smoothers.iter_mut()
+            .map(|s| s.next() as f64)
+            .collect();
+
+        let synthesizers = &mut self.synthesizers;
+        
+        // Compute IFFT in parallel, storing results in each synthesizer's `time_output`
+        synthesizers.par_iter_mut()
+            .zip(current_gains.par_iter())
+            .for_each(|(synth, &g)| {
+                synth.compute_block(&spectrum, g);
+            });
+
+        // 3. Monitor (Optional)
+        if let Some(monitor) = &mut self.monitor_sender {
+            monitor.send_spectrum(&spectrum);
+        }
+
+        // 4. Integration (Summation)
+        output.fill(0.0);
+        
+        for synth in synthesizers.iter() {
+            for (i, val) in synth.time_output.iter().enumerate() {
+                if i < output.len() {
+                    output[i] += val;
+                }
+            }
+        }
+    }
+}
+
+/// Main Processor
+pub struct WaveletProcessor {
+    analyzer: SpectralAnalyzer,
+    synthesizers: Vec<ScaleSynthesizer>,
+    
+    // Parameters
+    scales: Vec<f64>,
+    gains: Vec<f64>, // Scale gains (0.0 to 1.0 usually, but can be higher)
+    
+    // Info
+    fft_size: usize,
+    hop_size: usize,
+}
+
+impl WaveletProcessor {
+    pub fn new<W: MotherWavelet>(
+        sample_rate: f64,
+        fft_size: usize,
+        hop_size: usize,
+        num_scales: usize,
+        mother_wavelet: &W
+    ) -> Self {
+        let mut planner = FftPlanner::new();
+        let analyzer = SpectralAnalyzer::new(fft_size, hop_size, &mut planner);
+        
+        // Scale Setup (Logarithmic from Nyquist down)
+        // Example: 10 octaves range
+        let min_freq = 20.0;
+        let max_freq = sample_rate / 2.0;
+        let mut scales = Vec::with_capacity(num_scales);
+        
+        for i in 0..num_scales {
+            let p = i as f64 / (num_scales - 1) as f64;
+            // Low to High? Usually index 0 is lowest frequency in equalizer GUIs, 
+            // but in CWT often scale 0 is finest (highest freq).
+            // Let's stick to user intuition: Index 0 = Low Freq? 
+            // Or Index 0 = Scale Small (High Freq)?
+            // Morlet CWT usually: small scale -> high freq.
+            // Let's assume Index 0 is Highest Frequency (Small Scale).
+            let freq = max_freq * (min_freq / max_freq).powf(p);
+            scales.push(freq);
+        }
+
+        // Generate Kernels & Normalize
+        let mut kernels: Vec<Vec<Complex64>> = Vec::with_capacity(num_scales);
+        let mut freq_sum = vec![0.0; fft_size]; // For normalization
+
+        for s_idx in 0..num_scales {
+            let freq_target = scales[s_idx];
+            let w0 = 6.0; 
+            let scale = w0 / (2.0 * std::f64::consts::PI * freq_target / sample_rate);
+            
+            // Note: Update stored scale value if needed, but we store freq for now or raw scale
+            // scales[s_idx] = scale; // Let's keep freq in `scales` for display, compute scale local
+
+            let mut kernel = vec![Complex64::zero(); fft_size];
+            for k in 0..fft_size {
+                let omega = if k <= fft_size / 2 {
+                    k as f64 / fft_size as f64 * 2.0 * std::f64::consts::PI
+                } else {
+                    (k as f64 - fft_size as f64) / fft_size as f64 * 2.0 * std::f64::consts::PI
+                };
+                
+                let amp = mother_wavelet.frequency_domain(omega, scale); 
+                kernel[k] = Complex64::new(amp, 0.0);
+                freq_sum[k] += amp; 
+            }
+            kernels.push(kernel);
+        }
+
+        // Apply Normalization (Filter Bank Normalization)
+        for k in 0..fft_size {
+            if freq_sum[k] > 1e-6 {
+                let norm_factor = 1.0 / freq_sum[k];
+                for s_idx in 0..num_scales {
+                    kernels[s_idx][k] *= norm_factor;
+                }
+            }
+        }
+
+        // Create Synthesizers
+        let synthesizers = kernels.into_iter()
+            .map(|k| ScaleSynthesizer::new(fft_size, hop_size, &mut planner, k))
+            .collect();
+            
+        let gains = vec![1.0; num_scales];
+
+        Self {
+            analyzer,
+            synthesizers,
+            scales,
+            gains,
+            fft_size,
+            hop_size,
+        }
+    }
+
+    pub fn set_gain(&mut self, scale_idx: usize, gain: f64) {
+        if scale_idx < self.gains.len() {
+            self.gains[scale_idx] = gain;
+        }
+    }
+    
+    pub fn latency(&self) -> u32 {
+        // Latency is roughly fft_size - hop_size
+        // This is the implementation delay before the first hop is fully covered
+        (self.fft_size - self.hop_size) as u32
+    }
+    
+    pub fn process(&mut self, input: &[f32], output: &mut [f32]) {
+        self.analyzer.push_input(input);
+        
+        let mut samples_written = 0;
+        let output_len = output.len();
+        output.fill(0.0);
+
+        // 1. Run Analysis & Synthesis Loop
+        while let Some(spectrum) = self.analyzer.process_frame() {
+            // Parallel Processing with Gains
+            // We need to zip synthesizers with gains
+            // rayon zip? or just use index passed in closure?
+            // par_iter_mut().enumerate() works
+            self.synthesizers.par_iter_mut().enumerate().for_each(|(i, synth)| {
+                // Access gain carefully. 
+                // Since self is borrowed mutably for synthesizers, we can't access self.gains easily inside par_iter
+                // We should collect gains or pass slice
+                // But can't capture &self inside par_iter_mut of field
+                // Solution: pass gains as slice to the loop context?
+                // Or simply: gains are cheap to copy? No, list is dynamic.
+                // We can split borrows?
+                // Actually, just pass the specific gain.
+                // But we need random access or zipped iterator.
+                // synthesizers is Vec. gains is Vec. Same length.
+                // We can use par_iter_mut().zip(gains.par_iter())
+                // But gains is in self.
+                // We need to split self before.
+                // However, we are in a method of self.
+                // self.synthesizers and self.gains are disjoint fields.
+                // Explicitly splitting:
+                // let gains = &self.gains;
+                // let synths = &mut self.synthesizers;
+                // This works if the compiler sees disjointness.
+            });
+        }
+        
+        // Workaround for split borrow in loop (doing it properly below)
+        // Since we are inside a while loop using `analyzer`, we need to be careful.
+        // `analyzer` is separate from `synthesizers` and `gains`.
+        // So we can do:
+        // let analyzer = &mut self.analyzer;
+        // let synthesizers = &mut self.synthesizers;
+        // let gains = &self.gains;
+        // But `process_frame` mutates `analyzer`.
+        // The loop condition borrows `analyzer`.
+        // Inside body we borrow `synthesizers` and `gains`.
+        // This is fine.
+        
+        // However, `process_frame` returns `Option<Vec>`. The Vec owns the data.
+        // So we are good.
+        
+        let synthesizers = &mut self.synthesizers;
+        let gains = &self.gains;
+        
+        // Note: analyzer logic is "pull as many as possible".
+        // Re-implementing loop to avoid borrow checker issues with `self` if I just called `self.analyzer` mixed with `self.synthesizers`.
+        // Actually since `process_frame` is on analyzer, and loop body uses synthesizers, it's fine.
+        
+        // The loop is:
+         while let Some(spectrum) = self.analyzer.process_frame() {
+            synthesizers.par_iter_mut().zip(gains.par_iter()).for_each(|(synth, &g)| {
+                synth.process_spectrum(&spectrum, g);
+            });
+        }
+
+        // 2. Integration
+        for i in 0..output_len {
+            let mut sum = 0.0;
+            for synth in &mut self.synthesizers {
+                if let Some(val) = synth.output_queue.front() {
+                    sum += val;
+                }
+            }
+            
+            let mut data_available = true;
+            for synth in &mut self.synthesizers {
+                if synth.output_queue.pop_front().is_none() {
+                    data_available = false;
+                }
+            }
+            
+            if data_available {
+                output[i] = sum;
+            } else {
+                output[i] = 0.0;
+            }
+        }
+    }
+}

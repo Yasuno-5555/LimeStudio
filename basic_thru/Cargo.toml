@@ -1,0 +1,14 @@
+[package]
+name = "basic_thru"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+limestudio_core = { path = "../limestudio_core" }
+limestudio_plugin = { path = "../limestudio_plugin" } # Still needed for re-exports or helpers if any, or just dsp
+limestudio_dsp = { path = "../limestudio_dsp" }
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
