@@ -4,6 +4,7 @@ use nih_plug_vizia::widgets::*;
 use nih_plug_vizia::{create_vizia_editor, ViziaState, ViziaTheming};
 use ringbuf::Consumer;
 use std::sync::{Arc, Mutex};
+use std::cell::RefCell;
 
 use crate::BasicThruParams;
 

@@ -6,13 +6,10 @@ use limestudio_core::{AudioProcessor, AudioContext, ProcessContext};
 use ringbuf::{RingBuffer, Producer, Consumer};
 use crate::monitor::SpectrumMonitorSender;
 
-/// AudioProcessorトレイトを実装し、WaveletProcessorをラップするアダプター
+// AudioProcessorトレイトを実装し、WaveletProcessorをラップするアダプター
 pub struct WaveletEngineWrapper {
     pub processor: WaveletProcessor,
     pub gatherer: BlockGatherer,
-    
-    // Monitoring
-    monitor_consumer: Option<Consumer<Vec<f32>>>,
     
     // 現在のサンプルレート
     sample_rate: f64,
@@ -25,7 +22,7 @@ impl WaveletEngineWrapper {
         let hop_size = 512; 
         
         let morlet = Morlet::default();
-        let mut processor = WaveletProcessor::new(
+        let processor = WaveletProcessor::new(
             sample_rate,
             fft_size,
             hop_size,
@@ -33,25 +30,24 @@ impl WaveletEngineWrapper {
             &morlet
         );
         
-        // Setup Monitor Buffers (Capacity 16 frames is enough for GUI)
-        let ring = RingBuffer::<Vec<f32>>::new(16);
-        let (producer, consumer) = ring.split();
-        
-        let monitor_sender = SpectrumMonitorSender::new(producer, fft_size);
-        processor.set_monitor(monitor_sender);
-        
         let gatherer = BlockGatherer::new(fft_size, hop_size);
         
         Self {
             processor,
             gatherer,
-            monitor_consumer: Some(consumer),
             sample_rate,
         }
     }
     
     pub fn attach_monitor(&mut self) -> Option<Consumer<Vec<f32>>> {
-        self.monitor_consumer.take()
+        let fft_size = 2048; // Must match the processor's fft_size
+        let ring = RingBuffer::<Vec<f32>>::new(16);
+        let (producer, consumer) = ring.split();
+        
+        let monitor_sender = SpectrumMonitorSender::new(producer, fft_size);
+        self.processor.set_monitor(monitor_sender);
+        
+        Some(consumer)
     }
     
     pub fn set_scale_gain(&mut self, scale_idx: usize, gain: f64) {
@@ -90,47 +86,16 @@ impl AudioProcessor for WaveletEngineWrapper {
             let morlet = Morlet::default();
             
             // Note: Recreating processor loses Smoother states and Monitor connection!
-            // We should try to preserve current gains (target values) and Monitor Consumer.
-            // But Monitor Consumer loop is driven by the GUI which is external.
+            // The GUI visualization will stop until the editor is reopened or we implement a reconnection mechanism.
+            // For this phase, we accept this limitation.
             
-            // To properly handle this, we need to re-establish everything.
-            // Current gains from smoothers? We need to inspect smoothers.
-            // Let's assume we reset gains for simplicity or read 'target_value' if possible.
-            // Smoother has `current()` method. (Added in utils.rs)
-            
-            // We need to collect current gains from old processor
-            // But processor::smoothers is private (default visibility in module access).
-            // Actually WaveletProcessor fields are private.
-            // We can't access `smoothers` from wrapper unless exposed.
-            // For now, let's just reset (Unity Gain) -> or we need getters.
-            
-            let mut new_proc = WaveletProcessor::new(
+            let new_proc = WaveletProcessor::new(
                 self.sample_rate,
                 fft_size,
                 hop_size,
                 5, // TODO: keep previous count
                 &morlet
             );
-            
-            // Re-setup Monitor
-            // If the wrapper still has monitor_consumer, we can just new pair.
-            // If the Plugin took monitor_consumer, the GUI is holding the Consumer.
-            // The GUI's Consumer is disconnected from the old Producer.
-            // Effectively the GUI stops receiving updates.
-            // Ideally we need to swap the producer in a shared structure, 
-            // OR the GUI polls `attach_monitor()` again?
-            // "Hot-swapping" the producer is hard with `ringbuf`.
-            // For now, let's just recreate logic. The GUI might lose visualization on sample rate change.
-            // This is acceptable for "Phase 4.1".
-            
-            // Re-bind monitor
-            let ring = RingBuffer::<Vec<f32>>::new(16);
-            let (producer, consumer) = ring.split();
-            new_proc.set_monitor(SpectrumMonitorSender::new(producer, fft_size));
-            
-            // Restore Consumer (User has to attach again? Or we update internal state?)
-            // If we store `Option<Consumer>` in wrapper, we overwrite it.
-            self.monitor_consumer = Some(consumer);
             
             self.processor = new_proc;
             

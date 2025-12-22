@@ -15,9 +15,6 @@ pub struct BasicThru {
     // DSP Engine
     engine: Option<WaveletEngineWrapper>,
     
-    // Monitoring (Consumer passed to Editor)
-    monitor_consumer: Option<Consumer<Vec<f32>>>,
-    
     // Sample Rate
     sample_rate: f32,
 }
@@ -94,37 +91,12 @@ impl Plugin for BasicThru {
     }
     
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        // Monitor Comsumer を取り出す (一度だけ)
-        // もし2回目にeditorを開いた場合どうするか？
-        // Option::take() だと無くなってしまう。
-        // ConsumerはCloneできない。
-        // したがって、「エディタが閉じられたらConsumerを返してもらう」か、
-        // 「エディタ用にもう一度アタッチし直す」必要がある。
-        // Wrapperの構造上、`attach_monitor` は `monitor_consumer` を `take` する。
-        // 再生成は `prepare` で行われるが、それはオーディオ停止時とは限らない。
-        
-        // 解決策:
-        // Editorを開くたびに新しい接続が必要なら、Wrapperに「新しい接続くれ」と頼む必要がある。
-        // しかし ringbuf の split は生成時のみ。
-        // 実際は、PluginインスタンスがConsumerを保持し続け、
-        // Editor生成時に `Arc<Mutex<Option<Consumer>>>` を渡すのが一般的。
-        // Editor側で `lock().take()` すると無くなる。
-        // 簡素化のため、今回は「ConsumerをPluginが保持し、Editorには渡さない（または共有する）」構造で見直すか、
-        // あるいは `create_editor` が `Option` を受け取る今の形のまま、
-        // 「初回起動時のみビジュアライザーが動く」という制限を受け入れるか。
-        
-        // プロダクションでは: 
-        // Plugin struct holds `Arc<Mutex<Option<Consumer>>>`
-        // Editor gets a clone of this Arc.
-        // Inside Editor update loop, it locks and accesses consumer?
-        // No, Consumer is !Sync usually? ringbuf Consumer IS Send, but process is mut.
-        // We need to move Consumer into the Editor'sModel.
-        
-        // 今回の `monitor_consumer` は `Option<Consumer>`。
-        // `take()` して渡す。
+        // Monitor Consumer needs to be created fresh each time editor is opened
+        let consumer = self.engine.as_mut().and_then(|e| e.attach_monitor());
+
         editor::create_editor(
             self.params.clone(),
-            self.monitor_consumer.take(),
+            consumer,
             self.params.editor_state.clone(),
         )
     }
@@ -143,11 +115,7 @@ impl Plugin for BasicThru {
         // However, `nih_plug` handles latency reporting via `context.set_latency_samples` in `process`.
         // We ensure we call it in the first process call or whenever it changes.
         
-        // ★ モニターの接続
-        // WrapperからConsumerを取得し、構造体に保管しておく
-        if let Some(consumer) = engine.attach_monitor() {
-            self.monitor_consumer = Some(consumer);
-        }
+        // Note: Monitor creation is deferred to editor() call.
 
         self.engine = Some(engine);
         true
