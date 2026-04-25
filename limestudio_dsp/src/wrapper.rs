@@ -1,9 +1,10 @@
 use crate::processor::WaveletProcessor;
 use crate::wavelets::Morlet;
 use crate::gatherer::BlockGatherer;
-use limestudio_core::{AudioProcessor, AudioContext, ProcessContext};
+use limestudio_core::{AudioProcessor, ProcessContext};
 
-use ringbuf::{RingBuffer, Producer, Consumer};
+use std::sync::Arc;
+use ringbuf::{HeapRb, Consumer};
 use crate::monitor::SpectrumMonitorSender;
 
 // AudioProcessorトレイトを実装し、WaveletProcessorをラップするアダプター
@@ -13,6 +14,10 @@ pub struct WaveletEngineWrapper {
     
     // 現在のサンプルレート
     sample_rate: f64,
+    
+    // アロケーションを避けるためのスクラッチバッファ
+    input_scratch: Vec<f32>,
+    output_scratch: Vec<f32>,
 }
 
 impl WaveletEngineWrapper {
@@ -36,16 +41,18 @@ impl WaveletEngineWrapper {
             processor,
             gatherer,
             sample_rate,
+            input_scratch: Vec::with_capacity(4096), // 十分な初期量を確保
+            output_scratch: Vec::with_capacity(4096),
         }
     }
     
-    pub fn attach_monitor(&mut self) -> Option<Consumer<Vec<f32>>> {
+    pub fn attach_monitor(&mut self) -> Option<Consumer<Vec<f32>, Arc<HeapRb<Vec<f32>>>>> {
         let fft_size = 2048; // Must match the processor's fft_size
-        let ring = RingBuffer::<Vec<f32>>::new(16);
+        let ring = HeapRb::<Vec<f32>>::new(16);
         let (producer, consumer) = ring.split();
         
         let monitor_sender = SpectrumMonitorSender::new(producer, fft_size);
-        self.processor.set_monitor(monitor_sender);
+        self.processor.set_monitor(Box::new(monitor_sender));
         
         Some(consumer)
     }
@@ -77,6 +84,12 @@ impl WaveletEngineWrapper {
 
 impl AudioProcessor for WaveletEngineWrapper {
     fn prepare(&mut self, context: &ProcessContext) {
+        // スクラッチバッファのサイズを事前に確保 (アロケーションをここで行う)
+        if self.input_scratch.len() < context.max_block_size {
+            self.input_scratch.resize(context.max_block_size, 0.0);
+            self.output_scratch.resize(context.max_block_size, 0.0);
+        }
+
         // サンプルレート変更検知
         if (self.sample_rate - context.sample_rate).abs() > 0.1 {
             self.sample_rate = context.sample_rate;
@@ -85,43 +98,41 @@ impl AudioProcessor for WaveletEngineWrapper {
             let hop_size = 512;
             let morlet = Morlet::default();
             
-            // Note: Recreating processor loses Smoother states and Monitor connection!
-            // The GUI visualization will stop until the editor is reopened or we implement a reconnection mechanism.
-            // For this phase, we accept this limitation.
-            
             let new_proc = WaveletProcessor::new(
                 self.sample_rate,
                 fft_size,
                 hop_size,
-                5, // TODO: keep previous count
+                5,
                 &morlet
             );
             
             self.processor = new_proc;
-            
-            // Re-create gatherer to clear buffers
             self.gatherer = BlockGatherer::new(fft_size, hop_size);
         }
     }
 
     fn process<B: limestudio_core::AudioBuffer>(&mut self, buffer: &mut B) {
-        let mut out_slice = vec![0.0; buffer.samples()];
-        // Assuming channel 0 for now
-        let in_slice = buffer.channel(0).to_vec();
+        let num_samples = buffer.samples();
+        let num_channels = buffer.channels();
+
+        // 1. 入力データの取得 (Channel 0のみを暫定的に使用)
+        self.input_scratch[..num_samples].copy_from_slice(buffer.channel(0));
+
+        // 2. 処理の実行
+        // self.process() を呼び出す代わりに、フィールドを分解して借用することで
+        // 借用チェッカーの制限（self全体を借用しつつその一部を引数に渡せない）を回避する
+        let input = &self.input_scratch[..num_samples];
+        let output = &mut self.output_scratch[..num_samples];
+        let processor = &mut self.processor;
         
-        // Use the new process loop via gatherer
-        self.process(&in_slice, &mut out_slice);
-        
-        let dest = buffer.channel_mut(0);
-        for (i, &val) in out_slice.iter().enumerate() {
-            dest[i] = val;
-        }
-        
-        if buffer.channels() > 1 {
-             let dest_r = buffer.channel_mut(1);
-             for (i, &val) in out_slice.iter().enumerate() {
-                 dest_r[i] = val;
-             }
+        self.gatherer.process_stream(input, output, |in_block, out_block| {
+            processor.process_block(in_block, out_block);
+        });
+
+        // 3. 出力データへの書き戻し
+        for ch in 0..num_channels {
+            let dest = buffer.channel_mut(ch);
+            dest.copy_from_slice(&self.output_scratch[..num_samples]);
         }
     }
 

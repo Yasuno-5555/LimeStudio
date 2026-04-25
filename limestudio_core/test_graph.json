@@ -1,0 +1,59 @@
+{
+  "nodes": [
+    {
+      "Input": {
+        "channel": 0
+      }
+    },
+    {
+      "Output": {
+        "channel": 0
+      }
+    },
+    {
+      "Custom": {
+        "ops": [
+          {
+            "ReadInput": {
+              "channel": 0
+            }
+          },
+          {
+            "MulConst": 0.5
+          },
+          {
+            "WriteOutput": {
+              "channel": 0
+            }
+          }
+        ],
+        "inputs": [
+          {
+            "name": "in",
+            "port_type": "AudioMono"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "out",
+            "port_type": "AudioMono"
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    [
+      0,
+      0,
+      2,
+      0
+    ],
+    [
+      2,
+      0,
+      1,
+      0
+    ]
+  ]
+}

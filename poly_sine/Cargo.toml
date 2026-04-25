@@ -1,0 +1,12 @@
+[package]
+name = "poly_sine"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+limestudio_core = { path = "../limestudio_core" }
+limestudio_plugin = { path = "../limestudio_plugin" }
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs"] }

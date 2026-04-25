@@ -1,0 +1,37 @@
+{
+  "nodes": [
+    {
+      "Input": {
+        "channel": 0
+      }
+    },
+    {
+      "Stdlib": {
+        "Gain": {
+          "amount": {
+            "Const": 0.7
+          }
+        }
+      }
+    },
+    {
+      "Output": {
+        "channel": 0
+      }
+    }
+  ],
+  "edges": [
+    [
+      0,
+      0,
+      1,
+      0
+    ],
+    [
+      1,
+      0,
+      2,
+      0
+    ]
+  ]
+}

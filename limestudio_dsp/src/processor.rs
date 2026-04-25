@@ -2,6 +2,7 @@ use rustfft::{Fft, FftPlanner};
 use num_complex::{Complex, Complex64};
 use std::sync::Arc;
 use rayon::prelude::*;
+use rustfft::num_traits::Zero;
 use crate::wavelets::MotherWavelet;
 
 /// 1. Analysis Stage: 入力のFFTを担当 (Stateless-ish)
@@ -105,7 +106,7 @@ impl ScaleSynthesizer {
 }
 
 use crate::utils::Smoother;
-use crate::monitor::SpectrumMonitorSender;
+use crate::monitor::SpectrumMonitor;
 
 /// Main Processor (Block based)
 pub struct WaveletProcessor {
@@ -117,7 +118,7 @@ pub struct WaveletProcessor {
     smoothers: Vec<Smoother>,
     
     // Visualizer
-    monitor_sender: Option<SpectrumMonitorSender>,
+    monitor_sender: Option<Box<dyn SpectrumMonitor>>,
     
     fft_size: usize,
     hop_size: usize,
@@ -187,7 +188,7 @@ impl WaveletProcessor {
         // Initialize smoothers with 1.0 (Unity Gain)
         // Ramp time: 20ms typically good for gain
         let smoothers = (0..num_scales)
-            .map(|_| Smoother::new(1.0, sample_rate / hop_size as f64, 20.0)) // Update rate is Block Rate!
+            .map(|_| Smoother::new(1.0, (sample_rate / hop_size as f64) as f32, 20.0)) // Update rate is Block Rate!
             .collect();
 
         Self {
@@ -208,7 +209,7 @@ impl WaveletProcessor {
         }
     }
     
-    pub fn set_monitor(&mut self, sender: SpectrumMonitorSender) {
+    pub fn set_monitor(&mut self, sender: Box<dyn SpectrumMonitor>) {
         self.monitor_sender = Some(sender);
     }
     

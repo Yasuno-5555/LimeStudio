@@ -4,5 +4,9 @@ members = [
     "limestudio_dsp",
     "limestudio_plugin",
     "basic_thru",
+    "basic_gain",
+    "limestudio_cli",
+    "poly_sine",
+    "limestudio_vpl",
 ]
 resolver = "2"

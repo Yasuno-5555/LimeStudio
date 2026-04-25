@@ -1,80 +1,74 @@
-# Limestudio: Next-Generation Wavelet DSP Framework
+# LimeStudio: Visible Compiler for Audio Logic
 
-Limestudio is a high-performance, modular audio signal processing engine built in Rust. It leverages Continuous Wavelet Transform (CWT) to provide a multi-resolution analysis and synthesis framework, specifically designed for next-generation audio plugins and research applications.
+> "As long as you are on this carriage, you don't need to worry about DAW crashes or thread safety. Just whip as much as you like and pursue the sound."
 
-**Status**: Prototype Complete (v0.1.0)
-**License**: MIT
+LimeStudio is a high-performance audio framework built in Rust, designed for musicians and developers who want to create professional-grade audio plugins without diving into the complexities of low-level DSP mathematics.
 
----
-
-## Philosophy
-
-### 1. Structure over Hacks
-Limestudio rejects "black magic" DSP. Every component is structurally defined:
-*   **BlockGatherer**: Bridges the gap between arbitrary host buffer sizes and fixed DSP block requirements.
-*   **WaveletProcessor**: A stateless, block-based pure function mapping `Input Block -> Output Block`.
-*   **Zero-Allocation**: The "hot path" (audio processing loop) is guaranteed to be free of heap allocations.
-
-### 2. Visibility
-Audio processing should not be invisible. Limestudio integrates a high-performance, lock-free visualization bridge from day one.
-*   **Listening**: Artifact-free reconstruction (Perfect Reconstruction).
-*   **Seeing**: dB-accurate, GPU-accelerated Spectrogram.
-
-### 3. Modularity
-The core engine (`limestudio_dsp`) is completely decoupled from the plugin format (`limestudio_plugin`).
-*   **Core**: Pure Rust traits and logic.
-*   **Plugin**: `nih-plug` adapter for VST3/CLAP support.
-*   **GUI**: `vizia` based editor for visualization and control.
+## 1. Mission Statement
+**"A professional audio framework where musicians can create plugins without knowing math — VPL-first, completely open-source, and written in Rust."**
 
 ---
 
-## Architecture
+## 2. Core Philosophy
+
+### VPL is a Visible Compiler
+The Visual Programming Language (VPL) is not just a UI; it is an **AST Editor**. It transforms high-level logic into a linear, real-time safe **Intermediate Representation (IR)**.
+
+### Safe Sandbox (Scripting)
+The Sandbox (Rhai) is not about freedom; it's about **safe restriction**. Scripts are used to generate IR at compile-time, not to process samples directly in the audio thread.
+
+### Guaranteed Real-Time Safety
+The core execution engine (DspEngine) is a linear IR interpreter. It is guaranteed to be:
+- **Allocation-free**: Zero heap allocations in the audio path.
+- **Lock-free**: No mutexes or synchronization primitives in the hot path.
+- **Deterministic**: Same graph and script always produce the same IR.
+
+---
+
+## 3. Architecture
 
 ```mermaid
 graph TD
-    DAW[DAW Host] -->|Audio IO| Wrapper[WaveletEngineWrapper]
-    Wrapper -->|Input Stream| Gatherer[BlockGatherer]
-    
-    subgraph "Limestudio DSP Engine"
-        Gatherer -->|Fixed Block| Analyzer[SpectralAnalyzer]
-        Analyzer -->|Spectrum| Synth[ScaleSynthesizer (Parallel)]
-        Synth -->|Processed Blocks| Gatherer
-    end
-
-    Wrapper -->|Lock-Free| Visualizer[Spectrogram Widget]
-    Visualizer -->|Texture Update| GPU[GUI / GPU Canvas]
-    
-    Gatherer -->|Output Stream| DAW
+    VPL[egui VPL Editor] -->|JSON| Graph[AudioGraph AST]
+    Script[Rhai Sandbox] -->|IR Builder| Graph
+    Graph -->|Compile/Validate| IR[Linear IR Ops]
+    IR -->|Interpreter| Engine[DspEngine (Rust)]
+    Engine -->|Audio IO| DAW[Host DAW]
 ```
-
-## DSP Specifications
-
-*   **Mother Wavelet**: Complex Morlet (`w0 = 6.0`) for optimal time-frequency trade-off.
-*   **Scale Distribution**: Logarithmic (Musical) spacing.
-*   **Parallelism**: `rayon` based data-parallel processing per scale.
-*   **Latency**: Reported as `FrameSize - HopSize` (Deterministic).
-
-## Workspaces
-
-*   `limestudio_core`: Fundamental traits (`AudioProcessor`, `AudioBuffer`).
-*   `limestudio_dsp`: The heart of the engine. CWT, FFT, OLA logic.
-*   `limestudio_plugin`: Bridge to `nih-plug`.
-*   `basic_thru`: The reference implementation. A 5-band Wavelet EQ/Thru plugin.
-
-## Verification
-
-To verify the engine:
-
-```bash
-# Build the reference plugin (optimized)
-cargo build --release -p basic_thru
-```
-
-The resulting VST3/CLAP plugin provides:
-1.  **Perfect Reconstruction**: Pass-through audio with zero coloration when gains are at 1.0.
-2.  **Latency Reporting**: Correctly reports `FrameSize - HopSize` latency to the host.
-3.  **Visualization**: Real-time Spectrogram.
 
 ---
 
-*Clean Logic. Clear Sound.*
+## 4. Components
+
+- **`limestudio_core`**: The heart of the framework. Contains the IR definition, the `AudioGraph` AST, the compiler, and the `DspEngine` runtime.
+- **`limestudio_vpl`**: The visual frontend. A "Visible Compiler" that lets you build and inspect audio logic in real-time.
+- **`limestudio_plugin`**: Bridge to the outside world (NIH-plug), handling polyphony and host integration.
+- **`limestudio_dsp`**: Optimized DSP primitives used by the standard library.
+
+---
+
+## 5. Getting Started
+
+### Run the VPL Editor
+Inspect and build your audio logic visually:
+```bash
+cargo run -p limestudio_vpl
+```
+
+### Scripting Example
+Write a simple gain script in the Sandbox:
+```javascript
+let x = input(0); 
+let y = mul(x, 0.5); 
+output(0, y);
+```
+This script is compiled into optimized IR operations:
+1. `LoadBuffer(0)`
+2. `MulConst(0.5)`
+3. `StoreBuffer(Temp)`
+4. `CopyBuffer(Temp, Output)`
+
+---
+
+## 6. License
+MIT - Clean Logic. Professional Sound.

@@ -1,3 +1,13 @@
+pub mod ir;
+pub mod graph;
+pub mod validate;
+pub mod compile;
+pub mod engine;
+pub mod stdlib;
+pub mod polyphony;
+pub mod registry;
+pub mod scripting;
+
 /// オーディオバッファへのアクセスを抽象化するトレイト
 /// これにより、nih_plugのバッファや自前のVecなど、バックエンドの実装を隠蔽できる
 pub trait AudioBuffer {
@@ -7,7 +17,7 @@ pub trait AudioBuffer {
     fn samples(&self) -> usize;
     
     /// 指定チャンネルの不変スライスを取得
-    fn channel(&self, ch: usize) -> &[f32];
+    fn channel(&mut self, ch: usize) -> &[f32];
     
     /// 指定チャンネルの可変スライスを取得
     fn channel_mut(&mut self, ch: usize) -> &mut [f32];

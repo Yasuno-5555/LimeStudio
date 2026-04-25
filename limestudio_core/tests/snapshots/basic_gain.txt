@@ -1,0 +1,12 @@
+--- Snapshot: basic_gain ---
+Buffer Count: 2
+State Count:  0
+Operations:
+    0: ReadInput(ch=0)
+    1: StoreBuffer(B0)
+    2: LoadBuffer(B0)
+    3: MulConst(0.5)
+    4: StoreBuffer(B1)
+    5: LoadBuffer(B1)
+    6: WriteOutput(ch=0)
+-------------------

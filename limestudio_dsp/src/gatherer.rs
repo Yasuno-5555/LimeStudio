@@ -18,9 +18,11 @@ pub struct BlockGatherer {
 
 impl BlockGatherer {
     pub fn new(window_size: usize, hop_size: usize) -> Self {
+        // 十分なキャパシティを確保しておく (WindowSizeの数倍あれば通常は足りる)
+        let initial_capacity = window_size * 4;
         Self {
-            input_buffer: VecDeque::with_capacity(window_size * 2),
-            output_buffer: VecDeque::with_capacity(window_size * 2),
+            input_buffer: VecDeque::with_capacity(initial_capacity),
+            output_buffer: VecDeque::with_capacity(initial_capacity),
             window_size,
             hop_size,
             process_input_scratch: vec![0.0; window_size],
@@ -44,6 +46,7 @@ impl BlockGatherer {
         self.input_buffer.extend(input_slice);
 
         // 2. ウィンドウサイズ分溜まったら処理を回す
+        let mut hops_processed = 0;
         while self.input_buffer.len() >= self.window_size {
             // A. 入力データの準備
             for i in 0..self.window_size {
@@ -51,28 +54,27 @@ impl BlockGatherer {
             }
 
             // B. コールバック実行
-            // 出力スクラッチをクリアしてから渡すか、callback内で上書きするか
-            // ここではcallbackが上書き(fill)することを期待する
             process_callback(&self.process_input_scratch, &mut self.process_output_scratch);
 
             // C. Output Bufferへの OLA (Overlap-Add) 加算書き込み
-            // 足りなければ拡張 (倍以上確保してreallocation減らす)
-            if self.output_buffer.len() < self.window_size + self.hop_size {
-                self.output_buffer.resize(self.output_buffer.len() + self.window_size * 2, 0.0);
-            }
-            
-            // OLA: Add to existing buffer
+            // 処理が重なるため、正しいオフセット位置に加算する必要がある
+            let offset = hops_processed * self.hop_size;
             for (i, &sample) in self.process_output_scratch.iter().enumerate() {
-                if i < self.output_buffer.len() {
-                    self.output_buffer[i] += sample;
+                let target_idx = i + offset;
+                if target_idx < self.output_buffer.len() {
+                    self.output_buffer[target_idx] += sample;
                 } else {
-                    // resizeしてるので基本ここは通らないはずだが念のため
+                    // 足りない場合は 0 で埋めてから追加
+                    while self.output_buffer.len() < target_idx {
+                        self.output_buffer.push_back(0.0);
+                    }
                     self.output_buffer.push_back(sample);
                 }
             }
 
             // D. Hop (入力バッファを進める)
             self.input_buffer.drain(0..self.hop_size);
+            hops_processed += 1;
         }
 
         // 3. DAWへの出力
@@ -117,11 +119,15 @@ mod tests {
             dst.copy_from_slice(src); 
         });
         
-        // Check Latency: first (win - hop) samples should be 0.0
-        let latency = win - hop;
-        for i in 0..latency {
-            assert_eq!(output[i], 0.0, "Index {} should be 0.0 due to latency", i);
-        }
+        // Check Transient: The first samples should reflect the OLA buildup.
+        // Index 0: 1 block contributes -> 1.0
+        // Index 4: 2 blocks contribute -> 2.0
+        // Index 8: 3 blocks contribute -> 3.0
+        // Index 12: 4 blocks contribute (Steady State) -> 4.0
+        assert_eq!(output[0], 1.0, "Index 0 should be 1.0");
+        assert_eq!(output[4], 2.0, "Index 4 should be 2.0");
+        assert_eq!(output[8], 3.0, "Index 8 should be 3.0");
+        assert_eq!(output[12], 4.0, "Index 12 should reach steady state 4.0");
         
         // Check Signal: after latency, it should be 1.0 (assuming perfect OLA if we did fancy windowing, 
         // but here we just copy blocks. 
