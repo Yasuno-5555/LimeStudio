@@ -1,0 +1,9 @@
+[package]
+name = "mix-doctor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+limestudio_core = { path = "../../limestudio_core" }
+limestudio_dsp = { path = "../../limestudio_dsp" }
+nih_plug = "0.13"

@@ -93,7 +93,7 @@ impl std::fmt::Display for GraphNode {
 }
 
 /// オーディオグラフ (DAG)
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AudioGraph {
     pub nodes: Vec<GraphNode>, // index = NodeId
     pub edges: Vec<(NodeId, u32, NodeId, u32)>, // from, port, to, port

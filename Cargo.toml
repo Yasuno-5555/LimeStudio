@@ -8,5 +8,6 @@ members = [
     "limestudio_cli",
     "poly_sine",
     "limestudio_vpl",
+    "limestudio_surface",
 ]
 resolver = "2"

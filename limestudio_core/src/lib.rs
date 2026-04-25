@@ -7,6 +7,14 @@ pub mod stdlib;
 pub mod polyphony;
 pub mod registry;
 pub mod scripting;
+pub mod preset;
+pub mod param_spec;
+pub mod param_graph;
+pub mod hostile;
+pub mod golden;
+pub mod codegen;
+pub mod diff;
+pub mod provenance;
 
 /// オーディオバッファへのアクセスを抽象化するトレイト
 /// これにより、nih_plugのバッファや自前のVecなど、バックエンドの実装を隠蔽できる
