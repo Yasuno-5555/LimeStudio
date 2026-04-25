@@ -26,10 +26,16 @@ impl CompiledGraph {
     }
 }
 
+pub struct CompilationResult {
+    pub program: CompiledGraph,
+    pub node_to_ops: std::collections::HashMap<NodeId, std::ops::Range<usize>>,
+}
+
 /// グラフを IR 命令列にコンパイルする
 /// execution_order はトポロジカルソート済みであること
-pub fn compile_graph(graph: &AudioGraph, execution_order: &[NodeId]) -> CompiledGraph {
+pub fn compile_graph(graph: &AudioGraph, execution_order: &[NodeId]) -> CompilationResult {
     let mut compiled_ops = Vec::new();
+    let mut node_to_ops = std::collections::HashMap::new();
     let mut state_count = 0;
     
     // ポートごとのバッファ割り当てマップ
@@ -47,17 +53,16 @@ pub fn compile_graph(graph: &AudioGraph, execution_order: &[NodeId]) -> Compiled
     }
 
     for &node_id in execution_order {
+        let start_idx = compiled_ops.len();
         let node = &graph.nodes[node_id.0];
         
         match node {
             GraphNode::Input { channel } => {
-                // Input ノードは port 0 (AudioMono) を持つ
                 let buf_id = port_to_buffer[&(node_id, 0)];
                 compiled_ops.push(IrOp::ReadInput { channel: *channel });
                 compiled_ops.push(IrOp::StoreBuffer(buf_id));
             }
             GraphNode::Output { channel } => {
-                // Output ノードの入力を探す
                 for &(from, from_p, to, _) in &graph.edges {
                     if to == node_id {
                         let src_buf = port_to_buffer[&(from, from_p)];
@@ -68,23 +73,18 @@ pub fn compile_graph(graph: &AudioGraph, execution_order: &[NodeId]) -> Compiled
                 }
             }
             GraphNode::Stdlib(stdlib_node) => {
-                // 上流のノードを探して入力バッファを特定する
                 let in_ports = node.input_ports();
                 let mut inputs = vec![BufferId(0); in_ports.len()];
-                
                 for &(from, from_p, to, to_p) in &graph.edges {
                     if to == node_id {
                         inputs[to_p as usize] = port_to_buffer[&(from, from_p)];
                     }
                 }
-                
-                // 出力バッファの特定
                 let out_ports = node.output_ports();
                 let mut output_ids = Vec::new();
                 for port_idx in 0..out_ports.len() {
                     output_ids.push(port_to_buffer[&(node_id, port_idx as u32)]);
                 }
-                
                 let ops = stdlib_node.compile(&output_ids, &inputs);
                 for op in ops {
                     compiled_ops.push(op.clone());
@@ -114,8 +114,6 @@ pub fn compile_graph(graph: &AudioGraph, execution_order: &[NodeId]) -> Compiled
                 for port_idx in 0..out_ports.len() {
                     outputs.push(port_to_buffer[&(node_id, port_idx as u32)]);
                 }
-                
-                // Run Rhai
                 if let Ok((script_ops, next_temp)) = crate::scripting::run_script(source, inputs, outputs, buffer_counter as usize) {
                     buffer_counter = next_temp as u32;
                     for op in script_ops {
@@ -127,11 +125,18 @@ pub fn compile_graph(graph: &AudioGraph, execution_order: &[NodeId]) -> Compiled
                 }
             }
         }
+        
+        let end_idx = compiled_ops.len();
+        node_to_ops.insert(node_id, start_idx..end_idx);
     }
 
-    CompiledGraph {
-        ops: compiled_ops,
-        buffer_count: buffer_counter,
-        state_count,
+    CompilationResult {
+        program: CompiledGraph {
+            ops: compiled_ops,
+            buffer_count: buffer_counter,
+            state_count,
+        },
+        node_to_ops,
     }
 }
+

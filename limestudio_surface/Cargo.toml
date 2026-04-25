@@ -12,6 +12,7 @@ bytemuck = { version = "1.13", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 glam = "0.24" # Fast linear algebra
 log = "0.4"
+anyhow = "1.0"
 
 [dev-dependencies]
-anyhow = "1.0"
+

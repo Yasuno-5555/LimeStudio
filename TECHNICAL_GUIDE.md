@@ -1,42 +1,89 @@
-# LimeStudio Technical Guide: Extending the Framework
+# LimeStudio Technical Guide: Architecture & Implementation
 
-This guide is for developers who want to contribute to the core or extend the standard library.
-
-## 1. Adding a new IR Opcode
-
-If you need a new primitive (e.g., `Modulo`, `Log`, `Custom Filter`):
-
-1.  **Define the Opcode**: Add a variant to the `IrOp` enum in [ir.rs](file:///Users/yasuno/projects/LimeStudio/limestudio_core/src/ir.rs).
-2.  **Update Display**: Add the string representation in `impl Display for IrOp`.
-3.  **Implement Logic**: Add the execution branch in `DspEngine::process` in [engine.rs](file:///Users/yasuno/projects/LimeStudio/limestudio_core/src/engine.rs). **CRITICAL: Must be RT-Safe.**
-4.  **Register in Registry**: If it's a standalone node, add it to [registry.rs](file:///Users/yasuno/projects/LimeStudio/limestudio_core/src/registry.rs).
+This guide provides a deep dive into the technical implementation of LimeStudio's "Visible Compiler" and "Trust UI" systems.
 
 ---
 
-## 2. Adding a Standard Library Node
+## 1. The DspEngine & Linear IR
 
-Stdlib nodes are high-level abstractions over IR.
+The core of LimeStudio is a **Linear IR Interpreter**. This approach ensures real-time safety and determinism.
 
-1.  **Define Node Type**: Add a variant to `StdlibNode` in [stdlib.rs](file:///Users/yasuno/projects/LimeStudio/limestudio_core/src/stdlib.rs).
-2.  **Define Ports**: Update `input_ports()` and `output_ports()`.
-3.  **Implement Compilation**: Update `compile()` to generate the `Vec<IrOp>`.
-4.  **Add to Registry**: Add a `NodeDefinition` in [registry.rs](file:///Users/yasuno/projects/LimeStudio/limestudio_core/src/registry.rs) so it appears in the VPL.
+### 1.1 Instruction Set (IrOp)
+Instructions are designed to be atomic and allocation-free:
+- `LoadBuffer(id)` / `StoreBuffer(id)`: Explicit buffer management.
+- `MulConst(v)` / `AddConst(v)`: Optimized math primitives.
+- `Delay { samples, state_id }`: State-aware time processing.
+- `ReadInput` / `WriteOutput`: IO abstraction.
 
----
-
-## 3. The Compilation Pipeline
-
-The `compile_graph` function in [compile.rs](file:///Users/yasuno/projects/LimeStudio/limestudio_core/src/compile.rs) follows these steps:
-1.  **Topological Sort**: Determines the execution order based on edges.
-2.  **Buffer Allocation**: Assigns a unique `BufferId` to every output port.
-3.  **Opcode Generation**: Calls `compile()` on each node.
-4.  **Buffer Management**: Injects `LoadBuffer` and `StoreBuffer` ops to move data between nodes.
+### 1.2 Execution Loop
+The engine processes blocks of audio using a fixed-size `SampleStack` (typically 64 samples) to minimize register pressure and maximize cache hits.
 
 ---
 
-## 4. Testing Requirements
+## 2. Live Compiler & Visible Intelligence
 
-All core changes must pass the following tests:
-- **RT-Safe Audit**: No `Box`, `Vec` (pushing), `HashMap`, or `Mutex` in any function called by `DspEngine::process`.
-- **JSON Roundtrip**: Ensure the graph can be serialized and deserialized without losing data (`test_json_roundtrip_compilation_parity`).
-- **Bit-Identical IR**: Compilation must be deterministic.
+The "Visible Compiler" is implemented via a multi-stage feedback loop:
+
+1.  **Topological Sort**: `validate_graph` ensures the graph is a Directed Acyclic Graph (DAG).
+2.  **Linearization**: `compile_graph` converts the DAG into a flat sequence of `IrOp`.
+3.  **Mapping**: During compilation, we generate a `node_to_ops` map, linking every UI node to its resulting IR instructions.
+4.  **Codegen**: `ir_to_readable_rust` converts the IR into high-level variable-based Rust code for the user to inspect.
+
+---
+
+## 3. Lime Surface: The UI Runtime
+
+Lime Surface is a custom UI operating system built for audio.
+
+### 3.1 Physics-Based Interaction
+Linear interpolation is strictly forbidden. We use **Critically Damped Springs**:
+```rust
+fn spring_update(current, target, velocity, dt, stiffness, damping) -> f32 {
+    let force = (target - current) * stiffness;
+    *velocity = (*velocity + force * dt) * damping;
+    current + *velocity * dt
+}
+```
+This ensures that every knob and fader has "weight" and "resistance", providing tactile feedback even on a screen.
+
+### 3.2 SDF Rendering
+We use **Signed Distance Fields (SDF)** for all geometric primitives.
+- **Anti-aliasing**: Calculated in the fragment shader for pixel-perfect results at any zoom level.
+- **Modulation Rings**: Rendered as concentric SDF arcs with perceptual color interpolation (Oklab).
+
+---
+
+## 4. Hostile Validation (Tier S Safety)
+
+Real-time safety is not an afterthought. The `validate_hostile` function performs static analysis on the compiled IR:
+1.  **Denormal Detection**: Identifies feedback loops where subnormal numbers might accumulate.
+2.  **NaN Propagation**: Checks for potential division by zero or log(negative) scenarios.
+3.  **Latency Tracking**: Sums total sample delay across every path in the graph.
+4.  **Stack Overflow**: Verifies the depth of the IR stack against the engine's hard limits.
+
+---
+
+## 5. Preset & Migration System
+
+Plugins must be "compatible with the future self".
+- **Schema Version**: `u32` representing the data format (e.g., `v4`).
+- **Migration Hooks**: Versioned functions that transform `v(N)` JSON into `v(N+1)` state.
+- **Graph Diff**: A structural comparison engine that identifies specific node/port/parameter changes between two snapshots.
+
+---
+
+## 6. CLI & CI/CD Integration
+
+The CLI toolset (`limestudio_cli`) is designed to be integrated into professional workflows:
+- **`validate --hostile`**: Fails CI if a patch is not real-time safe.
+- **`render`**: Generates a deterministic "Golden Reference" for regression testing.
+- **`bench`**: Measures processing headroom to ensure the plugin runs on target hardware.
+
+---
+
+## 7. Implementation Roadmap (Reference)
+
+- **Tier S**: Core reliability (Presets, Hostile, 3-rate).
+- **Tier A**: Visibility & Transparency (Always Show Rust, Provenance).
+- **Tier B**: Operational Efficiency (ParamGraph, Inspector).
+- **Tier Ω**: Advanced Tooling (Graph Diff, Semantic Undo).

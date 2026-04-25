@@ -213,7 +213,7 @@ mod tests {
         graph.add_edge(gain_n, 0, out_n, 0);
         
         let order = crate::validate::validate_graph(&graph).unwrap();
-        let program = crate::compile::compile_graph(&graph, &order);
+        let program = crate::compile::compile_graph(&graph, &order).program;
         
         // IRに MulConst(0.7) が含まれているか確認
         let has_mul_const = program.ops.iter().any(|op| matches!(op, IrOp::MulConst(v) if (*v - 0.7).abs() < 0.001));
@@ -246,7 +246,7 @@ mod tests {
         
         // Compile original
         let order1 = validate_graph(&g).unwrap();
-        let prog1 = compile_graph(&g, &order1);
+        let prog1 = compile_graph(&g, &order1).program;
         
         // Roundtrip
         let json = g.to_json().unwrap();
@@ -254,7 +254,7 @@ mod tests {
         
         // Compile restored
         let order2 = validate_graph(&g2).unwrap();
-        let prog2 = compile_graph(&g2, &order2);
+        let prog2 = compile_graph(&g2, &order2).program;
         
         // Verify parity
         assert_eq!(prog1.ops.len(), prog2.ops.len());

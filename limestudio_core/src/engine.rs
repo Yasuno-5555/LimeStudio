@@ -24,7 +24,7 @@ pub struct DspEngine {
 impl DspEngine {
     pub fn new(graph: &AudioGraph) -> Result<Self, String> {
         let order = validate_graph(graph).map_err(|e| format!("{:?}", e))?;
-        let program = compile_graph(graph, &order);
+        let program = compile_graph(graph, &order).program;
         Ok(Self::new_from_program(program))
     }
 

@@ -171,7 +171,7 @@ mod tests {
         g.add_edge(NodeId(1), 0, NodeId(2), 0);
         
         let order = crate::validate::validate_graph(&g).unwrap();
-        compile_graph(&g, &order)
+        compile_graph(&g, &order).program
     }
 
     #[test]

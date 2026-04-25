@@ -14,7 +14,9 @@ pub mod hostile;
 pub mod golden;
 pub mod codegen;
 pub mod diff;
+pub mod live;
 pub mod provenance;
+pub mod undo;
 
 /// オーディオバッファへのアクセスを抽象化するトレイト
 /// これにより、nih_plugのバッファや自前のVecなど、バックエンドの実装を隠蔽できる

@@ -6,6 +6,7 @@ pub mod render;
 pub mod widgets;
 pub mod profiler;
 pub mod host_attach;
+pub mod runtime;
 
 /// The Core Surface Engine
 pub struct SurfaceEngine {

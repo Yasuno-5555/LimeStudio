@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 fn run_snapshot_test(name: &str, graph: &AudioGraph) {
     let order = validate_graph(graph).expect("Validation failed");
-    let program = compile_graph(graph, &order);
+    let program = compile_graph(graph, &order).program;
     
     let mut output = String::new();
     output.push_str(&format!("--- Snapshot: {} ---\n", name));

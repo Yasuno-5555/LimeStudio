@@ -21,7 +21,7 @@ fn bench_engine(c: &mut Criterion) {
     g.add_edge(gain, 0, output, 0);
     
     let order = validate_graph(&g).unwrap();
-    let program = compile_graph(&g, &order);
+    let program = compile_graph(&g, &order).program;
     let mut engine = DspEngine::new_from_program(program);
     
     let in_l = vec![0.1; 512];
@@ -61,7 +61,7 @@ fn bench_engine(c: &mut Criterion) {
     g_big.add_edge(prev, 0, output_node, 0);
     
     let order_big = validate_graph(&g_big).unwrap();
-    let program_big = compile_graph(&g_big, &order_big);
+    let program_big = compile_graph(&g_big, &order_big).program;
     let mut engine_big = DspEngine::new_from_program(program_big);
 
     c.bench_function("engine_process_block_1000_nodes", |b| {

@@ -298,7 +298,7 @@ macro_rules! lime_plugin_poly {
             fn default() -> Self {
                 let graph = $graph_fn();
                 let order = limestudio_core::validate::validate_graph(&graph).expect("Invalid graph");
-                let program = limestudio_core::compile::compile_graph(&graph, &order);
+                let program = limestudio_core::compile::compile_graph(&graph, &order).program;
                 
                 let config: PolyConfig = $config;
                 let mut allocator = limestudio_core::polyphony::VoiceAllocator::new(&program, config.max_voices);

@@ -42,7 +42,7 @@ impl eframe::App for VplApp {
                 // Show Latency in top bar (Trust UI)
                 match validate_graph(&self.graph) {
                     Ok(order) => {
-                        let program = compile_graph(&self.graph, &order);
+                        let program = compile_graph(&self.graph, &order).program;
                         let latency = 0; // TODO: Calculate from IR
                         widgets::safety_monitor(ui, latency, false);
                     }
@@ -82,7 +82,7 @@ impl eframe::App for VplApp {
                 
                 match validate_graph(&self.graph) {
                     Ok(order) => {
-                        let program = compile_graph(&self.graph, &order);
+                        let program = compile_graph(&self.graph, &order).program;
                         let report = validate_hostile(&self.graph, &program);
                         for check in &report.checks {
                             let color = match check.severity {

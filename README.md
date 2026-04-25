@@ -1,38 +1,55 @@
-# LimeStudio: Visible Compiler for Audio Logic
+# LimeStudio: The Visible Compiler for Audio Logic
 
-> "As long as you are on this carriage, you don't need to worry about DAW crashes or thread safety. Just whip as much as you like and pursue the sound."
+> "Confidence is the product. Visual clarity is the weapon."
 
-LimeStudio is a high-performance audio framework built in Rust, designed for musicians and developers who want to create professional-grade audio plugins without diving into the complexities of low-level DSP mathematics.
+LimeStudio is a high-performance audio framework designed for musicians and developers who demand professional-grade reliability, transparency, and "Trust UI" in their signal processing chains.
+
+---
 
 ## 1. Mission Statement
-**"A professional audio framework where musicians can create plugins without knowing math — VPL-first, completely open-source, and written in Rust."**
+**"A trust-first audio framework where musicians build products, not toys."**
+
+LimeStudio transforms the "Visual Programming Language" from a decorative interface into a **Visible Compiler**. Every connection, every knob, and every line of code is designed to eliminate ambiguity and provide absolute confidence in real-time safety.
 
 ---
 
-## 2. Core Philosophy
+## 2. The Core Pillars
 
-### VPL is a Visible Compiler
-The Visual Programming Language (VPL) is not just a UI; it is an **AST Editor**. It transforms high-level logic into a linear, real-time safe **Intermediate Representation (IR)**.
+### 2.1 Trust UI (Operational Clarity)
+We don't build "pretty" knobs. We build **Trust UI**.
+- **Modulation Rings**: Visualizing exactly how parameters are being influenced in real-time.
+- **Safety Monitors**: Instant visibility into latency, denormals, and math instability.
+- **Provenance Trace**: Tracking exactly why a parameter value is what it is (Macro -> LFO -> Velocity).
 
-### Safe Sandbox (Scripting)
-The Sandbox (Rhai) is not about freedom; it's about **safe restriction**. Scripts are used to generate IR at compile-time, not to process samples directly in the audio thread.
+### 2.2 Lime Surface (Physics-First UI Runtime)
+A custom `wgpu` + `SDF` rendering engine designed specifically for audio software.
+- **Forbidden Linear Lerp**: All UI transitions use **Critically Damped Springs** for inertia and resistance.
+- **Mandatory Oklab**: All color interpolation occurs in Oklab space for perceptual consistency.
+- **SDF Rendering**: Perfect anti-aliasing for knobs, cables, and meters with zero-cost scaling.
 
-### Guaranteed Real-Time Safety
-The core execution engine (DspEngine) is a linear IR interpreter. It is guaranteed to be:
-- **Allocation-free**: Zero heap allocations in the audio path.
-- **Lock-free**: No mutexes or synchronization primitives in the hot path.
-- **Deterministic**: Same graph and script always produce the same IR.
+### 2.3 Hostile Validation (Real-Time Safety)
+Plugin development is a war against "Hostile Environments". LimeStudio includes automated validation for:
+- **Denormal Prevention**: Automatic flushing of subnormal numbers.
+- **NaN/Inf Propagation**: Detecting and isolating math errors before they hit your speakers.
+- **Stack Safety**: Verifying DSP logic size before it ever runs on the audio thread.
 
 ---
 
-## 3. Architecture
+## 3. Architecture: The 3-Rate System
+
+LimeStudio separates processing into three distinct rates to compete with flagship pro-grade synths:
+
+1.  **Audio Rate (a-rate)**: Full 44.1kHz+ sample-accurate processing.
+2.  **Control Rate (k-rate)**: High-speed modulation and filter updates (typically 1/64 of a-rate).
+3.  **Event Rate (e-rate)**: Asynchronous trigger and MIDI event handling.
 
 ```mermaid
 graph TD
-    VPL[egui VPL Editor] -->|JSON| Graph[AudioGraph AST]
-    Script[Rhai Sandbox] -->|IR Builder| Graph
-    Graph -->|Compile/Validate| IR[Linear IR Ops]
-    IR -->|Interpreter| Engine[DspEngine (Rust)]
+    VPL[Lime Surface VPL] -->|JSON| Graph[AudioGraph AST]
+    Graph -->|Validation| Hostile[Hostile Report]
+    Graph -->|Compile| IR[Linear IR Ops]
+    IR -->|Codegen| Rust[Always Show Rust]
+    IR -->|Interpreter| Engine[DspEngine]
     Engine -->|Audio IO| DAW[Host DAW]
 ```
 
@@ -40,35 +57,42 @@ graph TD
 
 ## 4. Components
 
-- **`limestudio_core`**: The heart of the framework. Contains the IR definition, the `AudioGraph` AST, the compiler, and the `DspEngine` runtime.
-- **`limestudio_vpl`**: The visual frontend. A "Visible Compiler" that lets you build and inspect audio logic in real-time.
-- **`limestudio_plugin`**: Bridge to the outside world (NIH-plug), handling polyphony and host integration.
-- **`limestudio_dsp`**: Optimized DSP primitives used by the standard library.
+- **`limestudio_core`**: The heart. Preset migration, 3-rate ParamGraph, and the Live Compiler.
+- **`limestudio_surface`**: The face. Custom UI runtime with spring physics and SDF rendering.
+- **`limestudio_cli`**: The toolset. Offline rendering, benchmarking, and automated Rust code export.
+- **`limestudio_dsp`**: The muscle. Optimized SIMD-ready DSP primitives.
 
 ---
 
-## 5. Getting Started
+## 5. Productization Features (Tier S - Tier Ω)
 
-### Run the VPL Editor
-Inspect and build your audio logic visually:
+| Tier | Feature | Description |
+|---|---|---|
+| **S** | **Preset System** | Versioned migration (v0 -> v1) and A/B comparison. |
+| **S** | **Trust UI** | Modulation rings, provenance badges, and safety monitors. |
+| **S+** | **Live Compiler** | Zero-latency safe IR swapping while audio is running. |
+| **A** | **Always Show Rust** | Real-time conversion of visual logic to readable Rust code. |
+| **B** | **ParamGraph** | Automatic rate escalation (Event -> Control -> Audio). |
+| **Ω** | **Graph Diff** | Semantic comparison of patches to see "what changed". |
+
+---
+
+## 6. Getting Started
+
+### CLI Power Tools
+Validate your logic before hitting the DAW:
 ```bash
-cargo run -p limestudio_vpl
-```
+# Performance benchmark
+limestudio bench my_patch.lime --block-size 512
 
-### Scripting Example
-Write a simple gain script in the Sandbox:
-```javascript
-let x = input(0); 
-let y = mul(x, 0.5); 
-output(0, y);
+# Export to professional Rust code
+limestudio codegen my_patch.lime --output MyPlugin.rs
+
+# Offline deterministic render
+limestudio render my_patch.lime --duration 5.0
 ```
-This script is compiled into optimized IR operations:
-1. `LoadBuffer(0)`
-2. `MulConst(0.5)`
-3. `StoreBuffer(Temp)`
-4. `CopyBuffer(Temp, Output)`
 
 ---
 
-## 6. License
-MIT - Clean Logic. Professional Sound.
+## 7. License
+MIT - Transparent Logic. Professional Sound.
