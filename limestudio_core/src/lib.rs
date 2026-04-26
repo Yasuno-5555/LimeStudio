@@ -1,4 +1,7 @@
 pub mod ir;
+pub mod parameter;
+pub mod modulation;
+pub mod sandbox;
 pub mod graph;
 pub mod validate;
 pub mod compile;
@@ -11,6 +14,7 @@ pub mod preset;
 pub mod param_spec;
 pub mod param_graph;
 pub mod hostile;
+pub mod confidence;
 pub mod golden;
 pub mod codegen;
 pub mod diff;

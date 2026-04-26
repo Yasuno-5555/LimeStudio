@@ -12,6 +12,7 @@ use crate::style::colors;
 struct VplApp {
     graph: AudioGraph,
     registry: NodeRegistry,
+    engine: Option<limestudio_core::engine::DspEngine>,
     selected_node: Option<NodeId>,
     show_hostile_report: bool,
 }
@@ -21,6 +22,7 @@ impl Default for VplApp {
         Self {
             graph: AudioGraph::new(),
             registry: NodeRegistry::new(),
+            engine: None,
             selected_node: None,
             show_hostile_report: false,
         }
@@ -68,9 +70,24 @@ impl eframe::App for VplApp {
             ui.heading("Active Nodes");
             for (idx, node) in self.graph.nodes.iter().enumerate() {
                 let id = NodeId(idx);
-                if ui.selectable_label(self.selected_node == Some(id), format!("{:?}", id)).clicked() {
+                let response = ui.selectable_label(self.selected_node == Some(id), format!("{:?}", id));
+                if response.clicked() {
                     self.selected_node = Some(id);
                 }
+                
+                // Hover Card (Level 2)
+                response.on_hover_ui(|ui| {
+                    match validate_graph(&self.graph) {
+                        Ok(order) => {
+                            let result = compile_graph(&self.graph, &order);
+                            let info = result.confidence.get(&id);
+                            widgets::node_hover_card(ui, node, info);
+                        }
+                        Err(_) => {
+                            widgets::node_hover_card(ui, node, None);
+                        }
+                    }
+                });
             }
         });
 
@@ -106,8 +123,60 @@ impl eframe::App for VplApp {
             // Example Trust Widget
             if let Some(id) = self.selected_node {
                 ui.group(|ui| {
-                    ui.label(format!("Node {:?}", id));
-                    widgets::modulation_ring(ui, 0.5, 0.1, "CUTOFF");
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Node {:?}", id));
+                        
+                        // Recompile if needed
+                        if self.engine.is_none() {
+                            if let Ok(engine) = limestudio_core::engine::DspEngine::new(&self.graph) {
+                                self.engine = Some(engine);
+                            }
+                        }
+
+                        // Confidence Badge (Level 1)
+                        match validate_graph(&self.graph) {
+                            Ok(order) => {
+                                let result = compile_graph(&self.graph, &order);
+                                if let Some(info) = result.confidence.get(&id) {
+                                    widgets::confidence_badge(ui, info);
+                                }
+                            }
+                            Err(_) => {}
+                        }
+                    });
+                    
+                    if let Some(engine) = &mut self.engine {
+                        // Simulate audio processing for UI feedback
+                        let input = vec![0.0f32; 64];
+                        let mut output = vec![0.0f32; 64];
+                        engine.selected_node_for_scope = Some(id);
+                        engine.process_block(&[&input], &mut [&mut output]);
+
+                        ui.horizontal(|ui| {
+                            widgets::modulation_ring(ui, 0.5, 0.1, "CUTOFF");
+                            
+                            // Level Meter (Real Data)
+                            let peak = engine.node_peaks.get(id.0).cloned().unwrap_or(0.0);
+                            let rms = engine.node_rms.get(id.0).cloned().unwrap_or(0.0);
+                            widgets::level_meter(ui, &widgets::MeterState { peak, rms });
+                            
+                            // Oscilloscope (Real Data)
+                            widgets::oscilloscope(ui, &widgets::ScopeState { 
+                                buffer: engine.scope_buffer.clone(), 
+                                trigger_index: 0 
+                            });
+                        });
+                    }
+
+                    // Live Scripting UI
+                    if let Some(node) = self.graph.nodes.get_mut(id.0) {
+                        if let GraphNode::Script { source, .. } = node {
+                            ui.add_space(8.0);
+                            if widgets::script_editor(ui, source).changed() {
+                                self.engine = None; // Force re-compile and engine swap
+                            }
+                        }
+                    }
                 });
             }
         });

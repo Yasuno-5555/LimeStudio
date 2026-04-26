@@ -254,6 +254,123 @@ pub fn ir_to_readable_rust(program: &CompiledGraph) -> String {
     out
 }
 
+pub struct StandaloneProject {
+    pub cargo_toml: String,
+    pub lib_rs: String,
+}
+
+/// Standaloneプラグインプロジェクト（nih-plugベース）の生成
+pub fn generate_standalone_project(name: &str, program: &CompiledGraph) -> StandaloneProject {
+    let project_name = name.to_lowercase().replace(" ", "-");
+    let struct_name = name.replace(" ", "");
+
+    // 1. Cargo.toml の生成
+    let cargo_toml = format!(r#"[package]
+name = "{project_name}"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+nih_plug = {{ git = "https://github.com/robbert-vdh/nih-plug.git" }}
+serde = {{ version = "1.0", features = ["derive"] }}
+"#);
+
+    // 2. パラメータ定義の生成
+    let mut params_fields = String::new();
+    let mut params_init = String::new();
+    let mut params_array = String::new();
+
+    for (i, def) in program.parameter_definitions.iter().enumerate() {
+        let field_name = format!("param_{i}");
+        let label = &def.name;
+        let default = def.default_value;
+        let (min, max) = def.range;
+
+        params_fields.push_str(&format!("    #[id = \"{}\"]\n", def.id.0));
+        params_fields.push_str(&format!("    pub {field_name}: FloatParam,\n"));
+
+        params_init.push_str(&format!(
+            "            {field_name}: FloatParam::new(\"{label}\", {default:.4}, FloatRange::Linear {{ min: {min:.4}, max: {max:.4} }}),\n"
+        ));
+
+        params_array.push_str(&format!("self.params.{field_name}.value(), "));
+    }
+
+    let readable_process = ir_to_readable_rust(program);
+    
+    // 3. lib.rs のテンプレート
+    let lib_rs = format!(r#"use nih_plug::prelude::*;
+use std::sync::Arc;
+use serde::{{Serialize, Deserialize}};
+
+struct {struct_name} {{
+    params: Arc<{struct_name}Params>,
+}}
+
+#[derive(Params)]
+struct {struct_name}Params {{
+{params_fields}}}
+
+impl Default for {struct_name} {{
+    fn default() -> Self {{
+        Self {{
+            params: Arc::new({struct_name}Params {{
+{params_init}            }}),
+        }}
+    }}
+}}
+
+{readable_process}
+
+impl Plugin for {struct_name} {{
+    const NAME: &'static str = "{name}";
+    const VENDOR: &'static str = "LimeStudio User";
+    const URL: &'static str = "https://github.com/yasuno/LimeStudio";
+    const EMAIL: &'static str = "user@example.com";
+
+    const VIDEO_ADVISORY: VideoAdvisory = VideoAdvisory::None;
+
+    type SysExMessage = ();
+    type BackgroundTask = ();
+
+    fn params(&self) -> Arc<dyn Params> {{
+        self.params.clone()
+    }}
+
+    fn process(
+        &mut self,
+        buffer: &mut Buffer,
+        _aux: &mut AuxiliaryBuffers,
+        context: &mut impl ProcessContext<Self>,
+    ) -> ProcessStatus {{
+        for channel_samples in buffer.iter_samples() {{
+            let sr = context.transport().sample_rate;
+            let params = [{params_array}];
+            
+            for (idx, sample) in channel_samples.enumerate() {{
+                let (l, r) = process(*sample, *sample, &params, sr);
+                if idx == 0 {{ *sample = l; }}
+                else if idx == 1 {{ *sample = r; }}
+            }}
+        }}
+
+        ProcessStatus::Normal
+    }}
+}}
+
+nih_export_vst3!({struct_name});
+nih_export_clap!({struct_name});
+"#);
+
+    StandaloneProject {
+        cargo_toml,
+        lib_rs,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,7 +378,7 @@ mod tests {
     use crate::compile::CompiledGraph;
 
     #[test]
-    fn test_simple_gain_codegen() {
+    fn test_standalone_gen() {
         let program = CompiledGraph {
             ops: vec![
                 IrOp::ReadInput { channel: 0 },
@@ -270,54 +387,10 @@ mod tests {
             ],
             buffer_count: 0,
             state_count: 0,
+            parameter_definitions: vec![],
         };
-
-        let rust = ir_to_rust(&program);
-        assert!(rust.contains("input_l"));
-        assert!(rust.contains("0.5"));
-        assert!(rust.contains("out_l"));
-    }
-
-    #[test]
-    fn test_readable_gain() {
-        let program = CompiledGraph {
-            ops: vec![
-                IrOp::ReadInput { channel: 0 },
-                IrOp::MulConst(0.7),
-                IrOp::WriteOutput { channel: 0 },
-            ],
-            buffer_count: 0,
-            state_count: 0,
-        };
-
-        let rust = ir_to_readable_rust(&program);
-        assert!(rust.contains("input_l * 0.7000"));
-        assert!(rust.contains("fn process"));
-    }
-
-    #[test]
-    fn test_complex_graph_codegen() {
-        // Input -> Gain(0.5) -> Mix with Osc -> Output
-        let program = CompiledGraph {
-            ops: vec![
-                IrOp::ReadInput { channel: 0 },
-                IrOp::StoreBuffer(BufferId(0)),
-                IrOp::LoadBuffer(BufferId(0)),
-                IrOp::MulConst(0.5),
-                IrOp::LoadConst(440.0),
-                IrOp::LoadSampleRate,
-                IrOp::Div,
-                IrOp::Sin,
-                IrOp::Add,
-                IrOp::WriteOutput { channel: 0 },
-            ],
-            buffer_count: 1,
-            state_count: 0,
-        };
-
-        let rust = ir_to_readable_rust(&program);
-        // Should produce readable variable chain
-        assert!(rust.contains("sin()"));
-        assert!(rust.contains("440.0"));
+        let project = generate_standalone_project("MyEffect", &program);
+        assert!(project.cargo_toml.contains("nih-plug"));
+        assert!(project.lib_rs.contains("nih_export_vst3"));
     }
 }

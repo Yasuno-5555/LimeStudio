@@ -54,6 +54,12 @@ pub enum GraphNode {
         inputs: Vec<PortInfo>,
         outputs: Vec<PortInfo>,
     },
+    /// サブグラフを内包するコンテナノード
+    Container {
+        inner_graph: Box<AudioGraph>,
+        inputs: Vec<PortInfo>,
+        outputs: Vec<PortInfo>,
+    },
 }
 
 impl GraphNode {
@@ -65,6 +71,7 @@ impl GraphNode {
             GraphNode::Stdlib(node) => node.input_ports(),
             GraphNode::Custom { inputs, .. } => inputs.clone(),
             GraphNode::Script { inputs, .. } => inputs.clone(),
+            GraphNode::Container { inputs, .. } => inputs.clone(),
         }
     }
 
@@ -76,6 +83,7 @@ impl GraphNode {
             GraphNode::Stdlib(node) => node.output_ports(),
             GraphNode::Custom { outputs, .. } => outputs.clone(),
             GraphNode::Script { outputs, .. } => outputs.clone(),
+            GraphNode::Container { outputs, .. } => outputs.clone(),
         }
     }
 }
@@ -88,6 +96,7 @@ impl std::fmt::Display for GraphNode {
             GraphNode::Stdlib(node) => write!(f, "Stdlib({:?})", node),
             GraphNode::Custom { ops, .. } => write!(f, "Custom({} ops)", ops.len()),
             GraphNode::Script { source, .. } => write!(f, "Script({} chars)", source.len()),
+            GraphNode::Container { inner_graph, .. } => write!(f, "Container({} nodes)", inner_graph.nodes.len()),
         }
     }
 }

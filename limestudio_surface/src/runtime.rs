@@ -9,17 +9,30 @@ use winit::{
 };
 use crate::render::SurfaceRenderer;
 use crate::SurfaceEngine;
+use limestudio_core::live::LiveCompiler;
+use limestudio_core::engine::DspEngine;
+use std::sync::{Arc, Mutex};
 
 pub struct SurfaceRuntime {
     pub engine: SurfaceEngine,
     pub renderer: Option<SurfaceRenderer>,
+    pub compiler: LiveCompiler,
+    /// リアルタイム実行中のオーディオエンジン
+    pub audio_engine: Arc<Mutex<DspEngine>>,
 }
 
 impl SurfaceRuntime {
     pub fn new() -> Self {
+        let graph = limestudio_core::graph::AudioGraph::new();
+        let audio_engine = Arc::new(Mutex::new(
+            DspEngine::new(&graph).expect("Failed to initialize default audio engine")
+        ));
+        
         Self {
             engine: SurfaceEngine::new(),
             renderer: None,
+            compiler: LiveCompiler::new(graph),
+            audio_engine,
         }
     }
 
@@ -50,6 +63,19 @@ impl SurfaceRuntime {
                     window_target.exit();
                 }
                 Event::WindowEvent { event: WindowEvent::RedrawRequested, .. } => {
+                    // Phase 3: Check for graph changes and live-compile
+                    if self.engine.canvas.is_dirty {
+                        if let Ok(comp) = self.compiler.compile() {
+                            let mut audio = self.audio_engine.lock().unwrap();
+                            audio.swap_program(Arc::new(comp.program.clone()), comp.graph_version);
+                            
+                            // Always Show Rust: Generate code for UI
+                            let rust_code = limestudio_core::codegen::ir_to_readable_rust(&comp.program);
+                            // TODO: Send rust_code to a UI panel
+                        }
+                        self.engine.canvas.is_dirty = false;
+                    }
+
                     self.engine.profiler.begin_frame();
                     renderer.render(&self.engine.scene);
                     self.engine.profiler.end_frame();

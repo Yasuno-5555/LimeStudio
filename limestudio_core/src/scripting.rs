@@ -52,7 +52,7 @@ pub fn run_script(source: &str, inputs: Vec<BufferId>, outputs: Vec<BufferId>, s
         ctx.ops.push(IrOp::StoreBuffer(new_buf));
         Signal(new_buf)
     });
-    
+    // API: add(Signal, Signal) -> Signal
     let c = ctx.clone();
     engine.register_fn("add", move |sig1: Signal, sig2: Signal| -> Signal {
         let mut ctx = c.lock().unwrap();
@@ -60,6 +60,28 @@ pub fn run_script(source: &str, inputs: Vec<BufferId>, outputs: Vec<BufferId>, s
         ctx.ops.push(IrOp::LoadBuffer(sig1.0));
         ctx.ops.push(IrOp::LoadBuffer(sig2.0));
         ctx.ops.push(IrOp::Add);
+        ctx.ops.push(IrOp::StoreBuffer(new_buf));
+        Signal(new_buf)
+    });
+
+    // API: sin(Signal) -> Signal
+    let c = ctx.clone();
+    engine.register_fn("sin", move |sig: Signal| -> Signal {
+        let mut ctx = c.lock().unwrap();
+        let new_buf = ctx.alloc_buffer();
+        ctx.ops.push(IrOp::LoadBuffer(sig.0));
+        ctx.ops.push(IrOp::Sin);
+        ctx.ops.push(IrOp::StoreBuffer(new_buf));
+        Signal(new_buf)
+    });
+
+    // API: cos(Signal) -> Signal
+    let c = ctx.clone();
+    engine.register_fn("cos", move |sig: Signal| -> Signal {
+        let mut ctx = c.lock().unwrap();
+        let new_buf = ctx.alloc_buffer();
+        ctx.ops.push(IrOp::LoadBuffer(sig.0));
+        ctx.ops.push(IrOp::Cos);
         ctx.ops.push(IrOp::StoreBuffer(new_buf));
         Signal(new_buf)
     });

@@ -7,6 +7,7 @@ edition = "2021"
 limestudio_core = { path = "../limestudio_core" }
 wgpu = "0.19"
 winit = "0.29"
+raw-window-handle = "0.6"
 glyphon = "0.5"
 bytemuck = { version = "1.13", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }

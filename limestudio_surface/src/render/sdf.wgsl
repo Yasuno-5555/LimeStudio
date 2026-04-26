@@ -12,6 +12,14 @@ fn sd_circle(p: vec2<f32>, r: f32) -> f32 {
     return length(p) - r;
 }
 
+// Arc SDF for modulation rings
+fn sd_arc(p: vec2<f32>, sc: vec2<f32>, ra: f32, rb: f32) -> f32 {
+    var p_mut = p;
+    p_mut.x = abs(p_mut.x);
+    let k = if sc.y * p_mut.x > sc.x * p_mut.y { dot(p_mut, sc) } else { length(p_mut) };
+    return sqrt(dot(p_mut, p_mut) + ra * ra - 2.0 * ra * k) - rb;
+}
+
 // Rounded Box SDF
 fn sd_rounded_box(p: vec2<f32>, b: vec2<f32>, r: vec4<f32>) -> f32 {
     var r_val = r.x;
@@ -22,6 +30,14 @@ fn sd_rounded_box(p: vec2<f32>, b: vec2<f32>, r: vec4<f32>) -> f32 {
     
     let q = abs(p) - b + r_val;
     return min(max(q.x, q.y), 0.0) + length(max(q, vec2<f32>(0.0))) - r_val;
+}
+
+// Chamfered Box SDF
+fn sd_chamfered_box(p: vec2<f32>, b: vec2<f32>, c: f32) -> f32 {
+    let q = abs(p) - b;
+    let d1 = max(q.x, q.y);
+    let d2 = (q.x + q.y + c) * 0.70710678118;
+    return max(d1, d2);
 }
 
 // Line segment SDF

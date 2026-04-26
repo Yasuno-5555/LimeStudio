@@ -48,8 +48,9 @@ pub struct PresetMetadata {
 /// 全パラメータの値スナップショット
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ParameterState {
-    /// param_id -> normalized value (0.0..1.0)
-    pub values: HashMap<u32, f32>,
+    /// param_stable_id -> normalized value (0.0..1.0)
+    /// S Tier: S2 (Migration-safe)
+    pub values: HashMap<String, f32>,
 }
 
 /// モジュレーションマトリクスの状態
@@ -60,8 +61,8 @@ pub struct ModulationState {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModulationRouting {
-    pub source_id: u32,
-    pub target_param_id: u32,
+    pub source_id: String,
+    pub target_param_id: String,
     pub amount: f32,
     pub bipolar: bool,
 }
@@ -230,32 +231,28 @@ fn migrate_0_to_1(mut value: serde_json::Value) -> Result<serde_json::Value, Pre
     if let Some(metadata) = value.get_mut("metadata") {
         if let Some(obj) = metadata.as_object_mut() {
             obj.insert("schema_version".into(), serde_json::json!(1));
-            if !obj.contains_key("tags") {
-                obj.insert("tags".into(), serde_json::json!([]));
-            }
-            if !obj.contains_key("description") {
-                obj.insert("description".into(), serde_json::json!(""));
+        }
+    }
+    
+    // S2: ID Migration (u32 -> String)
+    if let Some(params) = value.get_mut("parameters") {
+        if let Some(values) = params.get_mut("values") {
+            if let Some(obj) = values.as_object_mut() {
+                // キーが数字の場合、文字列に変換（実際には serde が既に文字列として扱っている可能性があるが、明示的に行う）
+                let mut new_obj = serde_json::Map::new();
+                for (k, v) in obj.iter() {
+                    let new_key = if k.chars().all(|c| c.is_ascii_digit()) {
+                        format!("param_{}", k) // プレフィックスを付けてマイグレーションを明示
+                    } else {
+                        k.clone()
+                    };
+                    new_obj.insert(new_key, v.clone());
+                }
+                *obj = new_obj;
             }
         }
     }
-    // modulation_state が無い場合のデフォルト
-    if value.get("modulation_state").is_none() {
-        value.as_object_mut().unwrap().insert(
-            "modulation_state".into(),
-            serde_json::json!({"routings": []}),
-        );
-    }
-    // ui_state が無い場合のデフォルト
-    if value.get("ui_state").is_none() {
-        value.as_object_mut().unwrap().insert(
-            "ui_state".into(),
-            serde_json::json!({
-                "window_width": 1200, "window_height": 800,
-                "scroll_x": 0.0, "scroll_y": 0.0, "zoom": 1.0,
-                "extra": {}
-            }),
-        );
-    }
+
     Ok(value)
 }
 

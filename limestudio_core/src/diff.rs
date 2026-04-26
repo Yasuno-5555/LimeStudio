@@ -28,7 +28,7 @@ pub struct NodeModification {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParamChange {
-    pub param_id: u32,
+    pub param_id: String,
     pub old_value: f32,
     pub new_value: f32,
 }
@@ -77,7 +77,7 @@ impl GraphDiff {
         if !self.parameters_changed.is_empty() {
             println!("  Parameters Changed: {}", self.parameters_changed.len());
             for pc in &self.parameters_changed {
-                println!("    [~] P{}: {:.3} -> {:.3}", pc.param_id, pc.old_value, pc.new_value);
+                println!("    [~] {}: {:.3} -> {:.3}", pc.param_id, pc.old_value, pc.new_value);
             }
         }
         println!("══════════════════════════");
@@ -92,7 +92,7 @@ pub fn diff_presets(old: &Preset, new: &Preset) -> GraphDiff {
         let old_val = old.parameters.values.get(id).cloned().unwrap_or(0.0);
         if (old_val - new_val).abs() > 1e-6 {
             diff.parameters_changed.push(ParamChange {
-                param_id: *id,
+                param_id: id.clone(),
                 old_value: old_val,
                 new_value: new_val,
             });
@@ -103,7 +103,7 @@ pub fn diff_presets(old: &Preset, new: &Preset) -> GraphDiff {
     for (id, &old_val) in &old.parameters.values {
         if !new.parameters.values.contains_key(id) {
             diff.parameters_changed.push(ParamChange {
-                param_id: *id,
+                param_id: id.clone(),
                 old_value: old_val,
                 new_value: 0.0,
             });

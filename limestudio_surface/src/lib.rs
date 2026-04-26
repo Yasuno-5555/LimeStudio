@@ -8,12 +8,15 @@ pub mod profiler;
 pub mod host_attach;
 pub mod runtime;
 
+use crate::widgets::knob::ParamKnob;
+
 /// The Core Surface Engine
 pub struct SurfaceEngine {
     pub scene: scene::SurfaceScene,
     pub input: input::InteractionState,
     pub profiler: profiler::FrameProfiler,
     pub canvas: widgets::canvas::GraphCanvas,
+    pub knobs: Vec<ParamKnob>,
 }
 
 impl SurfaceEngine {
@@ -23,6 +26,7 @@ impl SurfaceEngine {
             input: input::InteractionState::new(3.0),
             profiler: profiler::FrameProfiler::new(),
             canvas: widgets::canvas::GraphCanvas::new(),
+            knobs: Vec::new(),
         }
     }
 }

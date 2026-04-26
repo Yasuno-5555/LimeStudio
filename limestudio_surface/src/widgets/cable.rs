@@ -23,31 +23,33 @@ pub struct SemanticCable {
 }
 
 impl SemanticCable {
-    pub fn get_style(&self) -> (Color, f32, Vec<f32>) {
+    pub fn get_style(&self, time: f32) -> (Color, f32, f32) {
         let base_color = match self.rate {
-            SemanticRate::Audio => Color::from_hex("#8CB369"),   // Calm Lime
-            SemanticRate::Control => Color::from_hex("#8E8E93"), // Secondary Text
-            SemanticRate::Event => Color::from_hex("#EBEBF5"),   // Primary Text
+            SemanticRate::Audio => Color::ACCENT_LIME,
+            SemanticRate::Control => Color::ACCENT_BLUE,
+            SemanticRate::Event => Color::ACCENT_BLUE,
         };
 
-        let thickness = match self.rate {
+        let mut thickness = match self.rate {
             SemanticRate::Audio => 3.0,
             _ => 1.5,
         };
 
-        let dash_array = match self.rate {
-            SemanticRate::Control => vec![10.0, 5.0],
-            SemanticRate::Event => vec![2.0, 8.0],
-            _ => vec![],
-        };
+        // 信号のエネルギー（RMS）に応じて太さを微細に変化させる
+        thickness += self.energy * 2.0;
 
-        let final_color = if self.is_feedback {
-            Color::from_hex("#D9735A") // Muted Amber (Warning)
+        let mut final_color = if self.is_feedback {
+            // フィードバック経路は赤く警告（点滅）
+            let pulse = (time * 5.0).sin() * 0.5 + 0.5;
+            crate::color::mix_oklab(Color::ERROR_RED, Color::BG_PANEL, pulse)
         } else {
             base_color
         };
 
-        (final_color, thickness, dash_array)
+        // 信号が流れているパルス効果の位相計算
+        let pulse_phase = (time * 2.0) % 1.0;
+
+        (final_color, thickness, pulse_phase)
     }
 }
 

@@ -12,6 +12,8 @@ pub struct GraphCanvas {
     pub selection: Vec<u32>,
     pub is_panning: bool,
     pub drag_start: Vec2,
+    /// グラフが変更されたかどうかのフラグ (Phase 3: Live Compile)
+    pub is_dirty: bool,
 }
 
 impl GraphCanvas {
@@ -22,6 +24,7 @@ impl GraphCanvas {
             selection: Vec::new(),
             is_panning: false,
             drag_start: Vec2::ZERO,
+            is_dirty: true, // 初回コンパイルを強制
         }
     }
 
