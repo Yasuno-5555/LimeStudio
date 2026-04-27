@@ -1,272 +1,307 @@
-use crate::ir::*;
-use crate::graph::AudioGraph;
-use crate::compile::{compile_graph, CompiledGraph};
-use crate::validate::validate_graph;
-use crate::parameter::ParameterRegistry;
-use std::sync::Arc;
+use crate::PatchEvent;
+use dirtydata_runtime::jit::{ExecutionPlan, PlanCompiler};
+use dirtydata_runtime::nodes::base::ProcessContext as DspProcessContext;
+use rtrb::Consumer;
 
-/// リアルタイム処理を担当する仮想マシンエンジン
-pub struct DspEngine {
-    pub program: CompiledGraph,
-    pub stack: SampleStack,
-    
-    // Node-to-Node communication buffers
-    buffers: Vec<f32>,
-    
-    // Stateful storage
-    delay_lines: Vec<Vec<f32>>,
-    delay_pos: Vec<usize>,
-    
-    // S Tier: Parameter System (S1)
-    pub parameters: ParameterRegistry,
-    
-    // Analysis & Trust UI (Phase 2)
-    pub node_peaks: Vec<f32>,
-    pub node_rms: Vec<f32>,
-    pub scope_buffer: Vec<f32>, 
-    pub selected_node_for_scope: Option<crate::graph::NodeId>,
-    
-    // S Tier: Validation (S3)
-    pub hostile_enabled: bool,
-    pub error_flags: std::collections::HashSet<String>,
-    
-    // Phase 2: Trust UI & Modulation
-    pub modulation: crate::modulation::ModulationProcessor,
-    pub modulated_values: Vec<f32>,
-    
-    // Phase 3: Visual Compiler (Live Swap)
-    pub current_program_version: u64,
-    pub pending_program: Option<Arc<CompiledGraph>>,
-    
-    sample_rate: u32,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VoiceState {
+    Idle,
+    Active { pitch: u8, velocity: f32, age: u64 },
+    Release { pitch: u8, age: u64 },
+    Stealing { 
+        pitch: u8, 
+        age: u64, 
+        fade_out_samples: u32,
+        next_note: Option<(u8, f32)>,
+    },
 }
 
-impl DspEngine {
-    pub fn new(graph: &AudioGraph) -> Result<Self, String> {
-        let order = validate_graph(graph).map_err(|e| format!("{:?}", e))?;
-        let result = compile_graph(graph, &order);
-        Ok(Self::new_from_program(result.program))
-    }
+pub enum VoiceEvent {
+    NoteOn { pitch: u8, velocity: f32 },
+    NoteOff { pitch: u8 },
+    Pressure { pitch: u8, value: f32 },
+    Tuning { pitch: u8, value: f32 },
+}
 
-    pub fn new_from_program(program: CompiledGraph) -> Self {
-        let buffers = vec![0.0; program.buffer_count as usize];
-        let mut delay_lines = Vec::new();
-        let mut delay_pos = Vec::new();
-        
-        for _ in 0..program.state_count {
-            delay_lines.push(vec![0.0; 44100]); // 1s buffer
-            delay_pos.push(0);
-        }
+pub struct VoicePlan {
+    pub plan: ExecutionPlan,
+    pub state: VoiceState,
+    pub last_level: f32,
+}
 
+impl VoicePlan {
+    pub fn new(plan: ExecutionPlan) -> Self {
         Self {
-            program,
-            stack: SampleStack::new(),
-            buffers,
-            delay_lines,
-            delay_pos,
-            parameters: ParameterRegistry::default(),
-            node_peaks: vec![0.0; 128],
-            node_rms: vec![0.0; 128],
-            scope_buffer: vec![0.0; 256],
-            selected_node_for_scope: None,
-            hostile_enabled: true,
-            error_flags: std::collections::HashSet::new(),
-            modulation: crate::modulation::ModulationProcessor::new(44100.0),
-            modulated_values: vec![0.0; 128],
-            current_program_version: 0,
-            pending_program: None,
-            sample_rate: 44100,
-        }
-    }
-    
-    pub fn swap_program(&mut self, program: Arc<CompiledGraph>, version: u64) {
-        self.pending_program = Some(program);
-        self.current_program_version = version;
-    }
-
-    pub fn set_param(&mut self, id: ParamId, value: f32) {
-        if let Some(param) = self.parameters.parameters.get(id.0 as usize) {
-            param.set_normalized(value);
+            plan,
+            state: VoiceState::Idle,
+            last_level: 0.0,
         }
     }
 
-    pub fn set_sample_rate(&mut self, sample_rate: u32) {
-        self.sample_rate = sample_rate;
+    pub fn reset(&mut self) {
+        self.state = VoiceState::Idle;
+        self.last_level = 0.0;
+        self.plan.reset();
     }
 
-    /// 1サンプルの処理
-    pub fn process_sample(&mut self, in_l: f32, in_r: f32) -> (f32, f32) {
-        self.stack.clear();
-
-        for op in &self.program.ops {
-            match op {
-                IrOp::LoadConst(v) => self.stack.push(*v),
-                IrOp::LoadParam(id) => {
-                    if let Some(param) = self.parameters.parameters.get(id.0 as usize) {
-                        let base = param.get_normalized();
-                        let offset = self.modulation.get_offset_for(id.0);
-                        let final_val = (base + offset).clamp(0.0, 1.0);
-                        
-                        if (id.0 as usize) < self.modulated_values.len() {
-                            self.modulated_values[id.0 as usize] = final_val;
-                        }
-                        
-                        self.stack.push(final_val);
-                    } else {
-                        self.stack.push(0.0);
-                    }
-                }
-                IrOp::LoadBuffer(id) => {
-                    self.stack.push(self.buffers[id.0 as usize]);
-                }
-                IrOp::StoreBuffer(id) => {
-                    self.buffers[id.0 as usize] = self.stack.peek();
-                }
-                IrOp::Add => {
-                    let b = self.stack.pop();
-                    let a = self.stack.pop();
-                    self.stack.push(a + b);
-                }
-                IrOp::Mul => {
-                    let b = self.stack.pop();
-                    let a = self.stack.pop();
-                    self.stack.push(a * b);
-                }
-                IrOp::MulConst(v) => {
-                    let a = self.stack.pop();
-                    self.stack.push(a * v);
-                }
-                IrOp::Sub => {
-                    let b = self.stack.pop();
-                    let a = self.stack.pop();
-                    self.stack.push(a - b);
-                }
-                IrOp::Div => {
-                    let b = self.stack.pop();
-                    let a = self.stack.pop();
-                    if b.abs() < 1e-9 {
-                        self.error_flags.insert("Division by zero".into());
-                        self.stack.push(0.0);
-                    } else {
-                        self.stack.push(a / b);
-                    }
-                }
-                IrOp::AddConst(v) => {
-                    let a = self.stack.pop();
-                    self.stack.push(a + v);
-                }
-                IrOp::Clamp { min, max } => {
-                    let a = self.stack.pop();
-                    self.stack.push(a.clamp(*min, *max));
-                }
-                IrOp::Abs => {
-                    let a = self.stack.pop();
-                    self.stack.push(a.abs());
-                }
-                IrOp::Sqrt => {
-                    let a = self.stack.pop();
-                    self.stack.push(a.sqrt());
-                }
-                IrOp::Neg => {
-                    let a = self.stack.pop();
-                    self.stack.push(-a);
-                }
-                IrOp::Sin => {
-                    let a = self.stack.pop();
-                    self.stack.push(a.sin());
-                }
-                IrOp::Cos => {
-                    let a = self.stack.pop();
-                    self.stack.push(a.cos());
-                }
-                IrOp::LoadSampleRate => {
-                    self.stack.push(self.sample_rate as f32);
-                }
-                IrOp::Delay { samples, state_id } => {
-                    let val = self.stack.pop();
-                    let id = state_id.0 as usize;
-                    let line = &mut self.delay_lines[id];
-                    let pos = &mut self.delay_pos[id];
-                    let output = line[*pos];
-                    line[*pos] = val;
-                    *pos = (*pos + 1) % (*samples as usize).max(1);
-                    self.stack.push(output);
-                }
-                IrOp::ReadInput { channel } => {
-                    let val = if *channel == 0 { in_l } else { in_r };
-                    self.stack.push(val);
-                }
-                IrOp::WriteOutput { channel } => {
-                    let val = self.stack.pop();
-                    let guarded_val = if self.hostile_enabled && (val.is_nan() || val.is_infinite()) {
-                        self.error_flags.insert(format!("NaN/Inf in output channel {}", channel));
-                        0.0
-                    } else {
-                        val
-                    };
-                    
-                    if *channel == 0 { self.node_peaks[0] = guarded_val.abs(); }
-                    else { self.node_peaks[1] = guarded_val.abs(); }
-                    
-                    self.stack.push(guarded_val);
-                }
-                IrOp::CopyBuffer(src, dst) => {
-                    self.buffers[dst.0 as usize] = self.buffers[src.0 as usize];
-                }
-                IrOp::AddBuffer(src, dst) => {
-                    self.buffers[dst.0 as usize] += self.buffers[src.0 as usize];
-                }
+    pub fn score(&self) -> f32 {
+        match self.state {
+            VoiceState::Idle => f32::INFINITY,
+            VoiceState::Active { age, .. } => {
+                // High importance, but older voices are slightly more stealable
+                1000.0 + self.last_level * 100.0 - (age as f32 * 0.00001)
             }
+            VoiceState::Release { age, .. } => {
+                // Lower importance
+                500.0 + self.last_level * 50.0 - (age as f32 * 0.0001)
+            }
+            VoiceState::Stealing { .. } => -1.0, // Already being stolen
         }
-
-        let out_r = self.stack.pop();
-        let out_l = self.stack.pop();
-
-        (out_l, out_r)
     }
 
-    pub fn process_block(&mut self, inputs: &[&[f32]], outputs: &mut [&mut [f32]]) {
-        let len = inputs[0].len();
+    pub fn process_sample(&mut self, ctx: &DspProcessContext) -> [f32; 2] {
+        let mut out = self.plan.execute(ctx);
         
-        for p in &mut self.node_peaks {
-            *p *= 0.95;
-        }
-
-        if let Some(new_program) = self.pending_program.take() {
-            self.program = (*new_program).clone();
-            self.buffers.resize(self.program.buffer_count as usize, 0.0);
-        }
-
-        for i in 0..len {
-            let in_l = inputs[0][i];
-            let in_r = if inputs.len() > 1 { inputs[1][i] } else { in_l };
-            
-            if i % 64 == 0 {
-                self.modulation.process(64);
+        match &mut self.state {
+            VoiceState::Active { age, .. } | VoiceState::Release { age, .. } => {
+                *age += 1;
             }
-
-            let (out_l, out_r) = self.process_sample(in_l, in_r);
-            
-            outputs[0][i] = out_l;
-            if outputs.len() > 1 {
-                outputs[1][i] = out_r;
+            VoiceState::Stealing { fade_out_samples, next_note, .. } => {
+                let gain = *fade_out_samples as f32 / 220.0;
+                out[0] *= gain;
+                out[1] *= gain;
+                if *fade_out_samples > 0 {
+                    *fade_out_samples -= 1;
+                } else if let Some((new_pitch, new_velocity)) = *next_note {
+                    self.state = VoiceState::Active { pitch: new_pitch, velocity: new_velocity, age: 0 };
+                    // Reset plan state
+                    self.plan.registers.fill([0.0, 0.0]);
+                    self.plan.set_parameter("gate", 1.0);
+                    self.plan.set_parameter("velocity", new_velocity);
+                    self.plan.set_parameter("pitch", new_pitch as f32);
+                } else {
+                    self.state = VoiceState::Idle;
+                }
             }
+            VoiceState::Idle => {
+                out = [0.0, 0.0];
+            }
+        }
+        
+        self.last_level = (out[0].abs() + out[1].abs()) * 0.5;
+        out
+    }
+}
 
-            if let Some(node_id) = self.selected_node_for_scope {
-                if node_id.0 < self.buffers.len() {
-                    let val = self.buffers[node_id.0];
-                    self.scope_buffer.rotate_left(1);
-                    if let Some(last) = self.scope_buffer.last_mut() {
-                        *last = val;
+pub struct VoiceManager {
+    pub voices: Vec<VoicePlan>,
+    pub patch_rx: Consumer<PatchEvent>,
+    pub sample_rate: f32,
+    pub signal_registry: Option<std::sync::Arc<crate::signal::SignalRegistry>>,
+    pub telemetry: Option<crate::telemetry::TelemetryProducer>,
+}
+
+impl VoiceManager {
+    pub fn new(
+        voices: Vec<VoicePlan>, 
+        patch_rx: Consumer<PatchEvent>, 
+        sample_rate: f32,
+        telemetry: Option<crate::telemetry::TelemetryProducer>,
+    ) -> Self {
+        Self {
+            voices,
+            patch_rx,
+            sample_rate,
+            signal_registry: None,
+            telemetry,
+        }
+    }
+
+    pub fn from_graph(
+        graph: &dirtydata_core::ir::Graph, 
+        patch_rx: Consumer<PatchEvent>, 
+        num_voices: usize, 
+        sample_rate: f32,
+        telemetry: Option<crate::telemetry::TelemetryProducer>,
+    ) -> Self {
+        let mut compiler = PlanCompiler::new();
+        let _base_plan = compiler.compile(graph);
+        
+        let mut voices = Vec::with_capacity(num_voices);
+        for _ in 0..num_voices {
+            let mut compiler = PlanCompiler::new();
+            let plan = compiler.compile(graph);
+            voices.push(VoicePlan::new(plan));
+        }
+        
+        Self::new(voices, patch_rx, sample_rate, telemetry)
+    }
+
+    pub fn reset(&mut self) {
+        for voice in &mut self.voices {
+            voice.reset();
+        }
+    }
+
+    pub fn handle_event(&mut self, event: VoiceEvent) {
+        match event {
+            VoiceEvent::NoteOn { pitch, velocity } => {
+                // 1. Find an idle voice
+                if let Some((idx, voice)) = self.voices.iter_mut().enumerate().find(|(_, v)| v.state == VoiceState::Idle) {
+                    voice.state = VoiceState::Active { pitch, velocity, age:0 };
+                    voice.plan.set_parameter("gate", 1.0);
+                    voice.plan.set_parameter("velocity", velocity);
+                    voice.plan.set_parameter("pitch", pitch as f32);
+                    voice.plan.set_parameter("tuning", 0.0); // Reset tuning for new note
+                    
+                    if let Some(tel) = &mut self.telemetry {
+                        tel.push(crate::telemetry::TelemetryEvent::VoiceActive { index: idx, pitch, velocity });
+                    }
+                    return;
+                }
+                
+                // 2. No idle voice, find best candidate to steal
+                let mut best_idx = 0;
+                let mut min_score = f32::INFINITY;
+                for (i, voice) in self.voices.iter().enumerate() {
+                    let s = voice.score();
+                    if s < min_score {
+                        min_score = s;
+                        best_idx = i;
+                    }
+                }
+                
+                let voice = &mut self.voices[best_idx];
+                match voice.state {
+                    VoiceState::Active { pitch: old_pitch, age, .. } | VoiceState::Release { pitch: old_pitch, age } => {
+                        voice.state = VoiceState::Stealing { 
+                            pitch: old_pitch, 
+                            age, 
+                            fade_out_samples: 220,
+                            next_note: Some((pitch, velocity)),
+                        };
+                        voice.plan.set_parameter("gate", 0.0);
+                        voice.plan.set_parameter("tuning", 0.0); // Reset tuning
+                    }
+                    VoiceState::Stealing { ref mut next_note, .. } => {
+                        // If already stealing, just replace the next note
+                        *next_note = Some((pitch, velocity));
+                    }
+                    _ => {}
+                }
+                
+                // Note: The new note is lost or we'd need a "pending" queue.
+                // For this implementation, we'll just start the new note in the NEXT available slot.
+            }
+            VoiceEvent::NoteOff { pitch } => {
+                for (idx, voice) in self.voices.iter_mut().enumerate() {
+                    if let VoiceState::Active { pitch: p, age, .. } = voice.state {
+                        if p == pitch {
+                            voice.state = VoiceState::Release { pitch, age };
+                            voice.plan.set_parameter("gate", 0.0);
+                            
+                            if let Some(tel) = &mut self.telemetry {
+                                tel.push(crate::telemetry::TelemetryEvent::VoiceReleased { index: idx });
+                            }
+                        }
+                    }
+                }
+            }
+            VoiceEvent::Pressure { pitch, value } => {
+                for voice in self.voices.iter_mut() {
+                    if let VoiceState::Active { pitch: p, .. } = voice.state {
+                        if p == pitch {
+                            voice.plan.set_parameter("pressure", value);
+                        }
+                    }
+                }
+            }
+            VoiceEvent::Tuning { pitch, value } => {
+                for voice in self.voices.iter_mut() {
+                    if let VoiceState::Active { pitch: p, .. } = voice.state {
+                        if p == pitch {
+                            voice.plan.set_parameter("tuning", value);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn process(&mut self, inputs: &[&[f32]], outputs: &mut [&mut [f32]], sample_rate: f32) {
+        self.sample_rate = sample_rate;
+        let block_start = std::time::Instant::now();
+        
+        // 1. Draining parameter updates
+        while let Ok(event) = self.patch_rx.pop() {
+            match event {
+                PatchEvent::SetParameter { param_id, value } => {
+                    for voice in &mut self.voices {
+                        voice.plan.set_parameter(&param_id, value);
                     }
                 }
             }
         }
 
-        for (i, p) in self.node_peaks.iter().enumerate() {
-            if i < self.node_rms.len() {
-                self.node_rms[i] = self.node_rms[i] * 0.8 + p * 0.2;
+        if outputs.is_empty() { return; }
+        let samples = outputs[0].len();
+        let num_outputs = outputs.len();
+
+        // Zero out outputs first
+        for output in outputs.iter_mut().take(num_outputs) {
+            for val in output.iter_mut().take(samples) {
+                *val = 0.0;
             }
         }
+
+        let mut peak_activity = 0.0f32;
+
+        for i in 0..samples {
+            let ctx = DspProcessContext {
+                sample_rate,
+                global_sample_index: i as u64,
+                crash_flag: None,
+                osc_tx: None,
+                convergence_info: None,
+                node_diagnostics: None,
+                node_id: None,
+            };
+
+            for voice in &mut self.voices {
+                if voice.state == VoiceState::Idle { continue; }
+                
+                // Setup input registers (Shared for all voices)
+                if !inputs.is_empty() {
+                    let input_l = inputs[0][i];
+                    let input_r = if inputs.len() > 1 { inputs[1][i] } else { input_l };
+                    voice.plan.registers[1] = [input_l, input_r];
+                }
+
+                let out = voice.process_sample(&ctx);
+                outputs[0][i] += out[0];
+                if num_outputs > 1 {
+                    outputs[1][i] += out[1];
+                }
+                
+                peak_activity = peak_activity.max(out[0].abs()).max(out[1].abs());
+            }
+        }
+
+        // Report metrics to the Truth Registry and Telemetry Bridge
+        let elapsed_us = block_start.elapsed().as_micros() as f32;
+        if let Some(reg) = &self.signal_registry {
+            reg.set_metric("engine/cpu_us", elapsed_us);
+            reg.set_metric("engine/activity", peak_activity);
+        }
+        if let Some(tel) = &mut self.telemetry {
+            tel.push(crate::telemetry::TelemetryEvent::CpuUsage { micros: elapsed_us });
+            if peak_activity > 0.99 {
+                tel.push(crate::telemetry::TelemetryEvent::ClipDetected { channel: 0, peak: peak_activity });
+            }
+        }
+    }
+
+    pub fn latency_samples(&self) -> u32 {
+        self.voices.first().map(|v| v.plan.latency_samples()).unwrap_or(0)
     }
 }

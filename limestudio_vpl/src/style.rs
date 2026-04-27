@@ -1,6 +1,4 @@
-//! LimeStudio Trust UI Design System
-//! 
-//! Matte & Solid. No gradients, no glows. Shape over Color.
+#![allow(clippy::excessive_precision)]
 
 pub mod colors {
     pub const MAIN_BG: &str = "#111112";

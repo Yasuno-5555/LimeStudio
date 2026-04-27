@@ -13,6 +13,10 @@ pub struct FrameProfiler {
     pub frames: Vec<f32>, // Rolling history for graph
 }
 
+impl Default for FrameProfiler {
+    fn default() -> Self { Self::new() }
+}
+
 impl FrameProfiler {
     pub fn new() -> Self {
         Self {

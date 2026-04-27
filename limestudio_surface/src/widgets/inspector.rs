@@ -3,10 +3,11 @@
 //! Real-time visualization of the compilation process and validation.
 
 use serde::{Serialize, Deserialize};
+use limestudio_core::UiIndex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompilerLens {
-    pub node_id: u32,
+    pub ui_index: UiIndex,
     pub ir_instructions: Vec<String>,
     pub rust_equivalent: String,
     pub validation_status: ValidationState,
@@ -27,6 +28,9 @@ pub struct InspectorState {
     pub show_provenance: bool,
 }
 
+impl Default for InspectorState {
+    fn default() -> Self { Self::new() }
+}
 impl InspectorState {
     pub fn new() -> Self {
         Self {

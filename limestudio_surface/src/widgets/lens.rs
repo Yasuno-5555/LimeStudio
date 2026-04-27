@@ -5,44 +5,53 @@
 
 use glam::Vec2;
 use crate::color::Color;
-use crate::scene::SurfaceScene;
+use crate::ui_ir::{SurfacePrimitive, FrameStyle, TemporalStrategy, GlyphPlacement, SurfaceId};
 
 pub struct CompilerLensOverlay {
-    pub node_id: u32,
+    pub id: SurfaceId,
     pub position: Vec2,
     pub ir_lines: Vec<String>,
     pub rust_lines: Vec<String>,
-    pub alpha: f32, // Fade in/out
+    pub is_active: bool,
 }
 
 impl CompilerLensOverlay {
-    pub fn new(node_id: u32, position: Vec2) -> Self {
+    pub fn new(id: SurfaceId, position: Vec2) -> Self {
         Self {
-            node_id,
+            id,
             position,
             ir_lines: Vec::new(),
             rust_lines: Vec::new(),
-            alpha: 0.0,
+            is_active: false,
         }
     }
 
-    pub fn update_content(&mut self, ir: Vec<String>, rust: String) {
-        self.ir_lines = ir;
-        self.rust_lines = rust.lines().map(|s| s.to_string()).collect();
-    }
+    pub fn build_primitives(&self) -> Vec<SurfacePrimitive> {
+        let mut primitives = Vec::new();
 
-    /// UI update loop (Motion System)
-    pub fn update(&mut self, dt: f32, is_selected: bool) {
-        let target_alpha = if is_selected { 1.0 } else { 0.0 };
-        // Use spring motion for alpha? 
-        // Trust UI: Precise fade.
-        self.alpha += (target_alpha - self.alpha) * (dt / 0.1).clamp(0.0, 1.0);
-    }
+        if !self.is_active {
+            return primitives;
+        }
 
-    /// Add to scene for rendering
-    pub fn render(&self, _scene: &mut SurfaceScene) {
-        if self.alpha < 0.01 { return; }
-        
-        // This would create SurfaceOverlay entries in the scene
+        // 1. Lens Background (Field style)
+        primitives.push(SurfacePrimitive::Frame {
+            id: self.id,
+            rect: [self.position.x, self.position.y, 200.0, 100.0],
+            style: FrameStyle::Field,
+            color: Color::AUTHORITY_BG.to_array(),
+            temporal: TemporalStrategy::Standard(0.1),
+        });
+
+        // 2. IR Content (Simplified placeholder)
+        primitives.push(SurfacePrimitive::GlyphRun {
+            placements: vec![GlyphPlacement {
+                glyph_id: 0,
+                pos: [self.position.x + 8.0, self.position.y + 20.0],
+                scale: 0.9,
+            }],
+            color: Color::SYNTAX_VAR.to_array(),
+        });
+
+        primitives
     }
 }

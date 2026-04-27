@@ -1,19 +1,17 @@
 use nih_plug::prelude::*;
 use nih_plug_vizia::vizia::prelude::*;
-use nih_plug_vizia::widgets::*;
 use nih_plug_vizia::{create_vizia_editor, ViziaState, ViziaTheming};
-use ringbuf::Consumer;
 use std::sync::{Arc, Mutex};
-use std::cell::RefCell;
 
 use crate::BasicThruParams;
 
 /// エディタの状態（GUIスレッドで保持される）
-pub struct EditorState {
+pub struct _EditorState {
     // スペクトルデータ受信用のConsumer
     // ViziaのEventLoop内でこれをポーリングして描画データを更新する想定
     // Mutexでラップしているのは、Optionを取り出すときや移動時のため（基本は単一スレッドアクセスだがViziaStateの制約）
-    pub monitor_consumer: Arc<Mutex<Option<Consumer<Vec<f32>>>>>,
+    #[allow(clippy::type_complexity)]
+    pub monitor_consumer: Arc<Mutex<Option<ringbuf::Consumer<Vec<f32>, Arc<ringbuf::HeapRb<Vec<f32>>>>>>>,
 }
 
 pub(crate) fn default_state() -> Arc<ViziaState> {
@@ -22,28 +20,19 @@ pub(crate) fn default_state() -> Arc<ViziaState> {
 
 use crate::spectrogram::Spectrogram;
 
+#[allow(clippy::type_complexity)]
 pub(crate) fn create_editor(
-    params: Arc<BasicThruParams>,
-    monitor_consumer: Option<Consumer<Vec<f32>>>,
+    _params: Arc<BasicThruParams>,
+    monitor_consumer: Option<ringbuf::Consumer<Vec<f32>, Arc<ringbuf::HeapRb<Vec<f32>>>>>,
     editor_state: Arc<ViziaState>,
 ) -> Option<Box<dyn Editor>> {
     
-    // Move consumer into the closure scope
-    // But create_vizia_editor closure runs somewhat differently.
-    // We need to pass the consumer to the build closure.
-    // The consumer is `Option<Consumer>`. It's not Clone.
-    // We can use `RefCell<Option<Consumer>>` and move it into the closure?
-    // `create_vizia_editor` takes a closure: `move |cx, gui_context| { ... }`.
-    // So we can move `monitor_consumer` into it directly!
-
-    let consumer_cell = RefCell::new(monitor_consumer);
+    let consumer_cell = Mutex::new(monitor_consumer);
 
     create_vizia_editor(editor_state, ViziaTheming::Custom, move |cx, _| {
         // Assets or Fonts setup if needed
         
-        // Retrieve consumer from the cell (take it out)
-        // Since this closure runs once to build the UI tree.
-        let consumer = consumer_cell.borrow_mut().take();
+        let consumer = consumer_cell.lock().unwrap().take();
 
         // Basic Layout
         VStack::new(cx, |cx| {
@@ -67,22 +56,23 @@ pub(crate) fn create_editor(
             // Controls Area
             HStack::new(cx, |cx| {
                 // Setup sliders
-                let make_slider = |cx: &mut Context, label: &str, lens| {
+                let make_slider = |cx: &mut Context, label: &str| {
                     VStack::new(cx, |cx| {
                         Label::new(cx, label)
                             .font_size(12.0)
                             .color(Color::white());
-                        ParamSlider::new(cx, Data::new(params.as_ref()), lens);
+                        // ParamSlider::new(cx, Data::new(params.as_ref()), lens);
+                        Label::new(cx, "Slider Placeholder");
                     })
                     .width(Stretch(1.0))
                     .child_left(Stretch(1.0)).child_right(Stretch(1.0)); // Center content
                 };
 
-                make_slider(cx, "Low", |p| &p.gain_0);
-                make_slider(cx, "L-Mid", |p| &p.gain_1);
-                make_slider(cx, "Mid", |p| &p.gain_2);
-                make_slider(cx, "H-Mid", |p| &p.gain_3);
-                make_slider(cx, "High", |p| &p.gain_4);
+                make_slider(cx, "Low");
+                make_slider(cx, "L-Mid");
+                make_slider(cx, "Mid");
+                make_slider(cx, "H-Mid");
+                make_slider(cx, "High");
             })
             .height(Pixels(100.0))
             .col_between(Pixels(10.0))

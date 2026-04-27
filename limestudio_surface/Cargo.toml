@@ -1,19 +1,30 @@
 [package]
 name = "limestudio_surface"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "surface-verify"
+path = "src/main_verify.rs"
 
 [dependencies]
 limestudio_core = { path = "../limestudio_core" }
-wgpu = "0.19"
-winit = "0.29"
+dirtydata-core = { path = "../DirtyData/crates/dirtydata-core" }
+dirtydata-runtime = { path = "../DirtyData/crates/dirtydata-runtime" }
+wgpu.workspace = true
+winit.workspace = true
 raw-window-handle = "0.6"
-glyphon = "0.5"
-bytemuck = { version = "1.13", features = ["derive"] }
-serde = { version = "1.0", features = ["derive"] }
-glam = "0.24" # Fast linear algebra
-log = "0.4"
-anyhow = "1.0"
-
-[dev-dependencies]
-
+glyphon.workspace = true
+bytemuck.workspace = true
+serde.workspace = true
+glam.workspace = true
+log.workspace = true
+taffy.workspace = true
+tokio = { version = "1", features = ["full"] }
+env_logger = "0.11"
+pollster = { workspace = true }
+rtrb = "0.3"
+anyhow.workspace = true
+ulid.workspace = true

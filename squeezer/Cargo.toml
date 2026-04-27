@@ -1,0 +1,24 @@
+[package]
+name = "squeezer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+limestudio_core = { path = "../limestudio_core" }
+limestudio_surface = { path = "../limestudio_surface" }
+limestudio_vpl = { path = "../limestudio_vpl" }
+dirtydata-core = { path = "../DirtyData/crates/dirtydata-core" }
+dirtydata-runtime = { path = "../DirtyData/crates/dirtydata-runtime" }
+crossbeam-channel = "0.5"
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ulid = { workspace = true }
+glam = { workspace = true }
+winit = { workspace = true }
+wgpu = { workspace = true }
+pollster = { workspace = true }
+tracing-subscriber = { workspace = true }
+log = { workspace = true }
+rtrb = { workspace = true }
+toml = { workspace = true }

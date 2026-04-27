@@ -1,0 +1,30 @@
+# LimeLint Configuration (HIG v3.0 Law Edition)
+
+[visual]
+# Absolute laws
+forbidden_attributes = ["shadow", "glow", "bloom", "blur"]
+grid_step = 8.0 # Multiples of 8px required
+color_space = "oklab" # Use Oklab constants only
+
+[architectural]
+# Law: Parameter = Truth
+enforce_parameter_authority = true
+forbidden_local_state = ["mut ", "Cell<", "RefCell<"] # Simplified detection
+
+[realtime]
+# The "Known Bad List" - Blocking or non-deterministic calls
+[realtime.forbidden_calls]
+"std::sync::Mutex::lock" = "Mutex in audio thread is a crime."
+"std::io::Write::write" = "I/O in DSP path detected. Civility requires deterministic audio."
+"println!" = "println! in DSP path. Human-readable logs belong in the UI layer, not the engine."
+"std::vec::Vec::push" = "Dynamic allocation (Vec::push) in audio thread. Memory must be pre-allocated."
+"Box::new" = "Heap allocation (Box::new) in realtime path. Use static allocation or pre-allocated pools."
+
+[accessibility]
+# Mandatory interaction handlers
+required_interactions = ["double_click_reset", "precision_mode", "focus_ring"]
+
+[preset]
+# Forensic Truth
+validate_artifacts = true
+check_codeview_consistency = true

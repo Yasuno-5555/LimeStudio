@@ -1,22 +1,24 @@
-use limestudio_core::graph::{AudioGraph, GraphNode};
-use limestudio_core::preset::Preset;
+use limestudio_core::graph::{GraphBuilder, ParamSource};
+use limestudio_core::preset::PresetArtifact;
+use std::collections::HashMap;
 
 fn main() {
     println!("LimeStudio Synth Template");
     
     // Create a basic polyphonic sine synth
-    let mut graph = AudioGraph::new();
-    let osc = graph.add_node(GraphNode::Stdlib(limestudio_core::stdlib::StdlibNode::Oscillator {
-        freq: limestudio_core::ir::ParamRef::Const(440.0),
-        wave: limestudio_core::stdlib::Waveform::Sine,
-    }));
-    let out = graph.add_node(GraphNode::Output { channel: 0 });
-    graph.add_edge(osc, 0, out, 0);
+    let mut builder = GraphBuilder::new();
+    let osc = builder.add_processor("Oscillator", vec![
+        ("freq", ParamSource::Constant(440.0)),
+    ]);
+    builder.connect(osc, builder.output_node());
     
-    let preset = Preset {
-        graph_snapshot: graph,
-        ..Preset::default()
-    };
+    let graph = builder.build();
+    let preset = PresetArtifact::new(
+        "Synth Template".to_string(),
+        graph,
+        HashMap::new(),
+        None,
+    );
     
-    println!("Initial preset generated with {} nodes.", preset.graph_snapshot.nodes.len());
+    println!("Initial preset generated with {} nodes.", preset.graph.nodes.len());
 }

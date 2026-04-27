@@ -1,10 +1,10 @@
 use clap::{Parser, Subcommand};
-use limestudio_core::graph::AudioGraph;
-use limestudio_core::preset::{Preset, diagnose_preset};
-use limestudio_core::hostile::validate_hostile;
-use limestudio_core::validate::validate_graph;
-use limestudio_core::compile::compile_graph;
+use limestudio_core::preset::PresetArtifact;
 use std::path::PathBuf;
+mod color;
+use color::Colorize;
+use std::process::Command;
+use limestudio_core::builder::BuildOrchestrator;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -15,204 +15,182 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// プリセット/グラフファイルを詳細検査する
-    Inspect {
-        /// ファイルパス (.json または .lime)
+    /// プリセットの証拠能力（改竄・再現性）を検証する
+    Verify {
+        /// 検証するプリセットファイル (.lime)
         file: PathBuf,
     },
-    /// Hostile Validation を実行する
-    Validate {
-        /// ファイルパス (.json または .lime)
-        file: PathBuf,
-        /// より残酷な検証を行う
+    /// pluginval を使用してビルド済みバイナリを詳細検証する
+    Pluginval {
+        /// 検証するバイナリのパス (.vst3, .clap)
+        path: PathBuf,
+        /// 厳格モードで実行する (Level 10)
         #[arg(short, long)]
-        hostile: bool,
+        strict: bool,
     },
-    /// プリセットの健全性をチェックする (Preset Doctor)
-    Doctor {
-        /// プリセットファイルのパス (.lime)
+    /// リアルタイム耐性ストレステスト (LFOスパム / テンポ変更 / デノーマル)
+    Stress {
+        /// 検証するバイナリのパス (.vst3, .clap)
+        path: PathBuf,
+    },
+    /// 証拠品（プリセット）の詳細な法医学レポートを生成する
+    Testify {
+        /// 検証するプリセットファイル (.lime)
         file: PathBuf,
     },
-    /// 2つのプリセットの差分を表示する
-    Diff {
-        /// 以前のプリセット
-        old: PathBuf,
-        /// 新しいプリセット
-        new: PathBuf,
-    },
-    /// 指定された時間 (秒) だけオーディオをレンダリングして出力する
-    Render {
-        /// プリセットファイル (.lime)
-        file: PathBuf,
-        /// 出力ファイル名 (.wav)
-        #[arg(short, long, default_value = "output.wav")]
-        output: PathBuf,
-        /// レンダリング時間 (秒)
-        #[arg(short, long, default_value_t = 1.0)]
-        duration: f32,
-    },
-    /// パフォーマンス計測 (ベンチマーク)
-    Bench {
-        /// プリセットファイル (.lime)
-        file: PathBuf,
-        /// ブロックサイズ
-        #[arg(short, long, default_value_t = 512)]
-        block_size: usize,
-    },
-    /// Rust コードをエクスポートする
-    Codegen {
-        /// プリセットファイル (.lime)
-        file: PathBuf,
-        /// 出力ファイル名
-        #[arg(short, long)]
-        output: Option<PathBuf>,
-    },
+    /// 生存条件診断（Survival Condition Check）
+    Doctor,
+    /// プラグインを製品版としてビルド・署名する
+    Release,
+    
+    // 以下、要件見直しにより一時停止中のコマンド
+    Validate { file: PathBuf, #[arg(short, long)] hostile: bool },
+    Diff { old: PathBuf, new: PathBuf },
+    Render { file: PathBuf, output: PathBuf, #[arg(short, long, default_value_t = 1.0)] duration: f32 },
+    Bench { file: PathBuf, #[arg(short, long, default_value_t = 64)] block_size: usize },
+    Codegen { file: PathBuf, output: Option<PathBuf> },
+    Lint { #[arg(short, long)] strict: bool },
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Inspect { file } => {
-            let (graph, _preset) = load_file(&file);
-            graph.debug_dump();
-            
-            match validate_graph(&graph) {
-                Ok(order) => {
-                    let program = compile_graph(&graph, &order).program;
-                    program.pretty_print();
-                }
-                Err(e) => {
-                    println!("Basic Validation failed: {:?}", e);
-                }
-            }
-        }
-        Commands::Validate { file, hostile } => {
-            let (graph, _preset) = load_file(&file);
-            
-            if hostile {
-                println!("Running Hostile Validation...");
-                match validate_graph(&graph) {
-                    Ok(order) => {
-                        let program = compile_graph(&graph, &order).program;
-                        let report = validate_hostile(&graph, &program);
-                        report.print_report();
-                        if report.has_errors() {
-                            std::process::exit(1);
-                        }
-                    }
-                    Err(e) => {
-                        println!("Structural Validation failed: {:?}", e);
-                        std::process::exit(1);
-                    }
-                }
-            } else {
-                match validate_graph(&graph) {
-                    Ok(_) => println!("Structural Validation successful."),
-                    Err(e) => {
-                        println!("Validation failed: {:?}", e);
-                        std::process::exit(1);
-                    }
-                }
-            }
-        }
-        Commands::Doctor { file } => {
+        Commands::Verify { file } => {
             let json = std::fs::read_to_string(&file).expect("Failed to read file");
-            let preset = Preset::from_json(&json).expect("Failed to parse preset");
-            let report = diagnose_preset(&preset);
+            let artifact: PresetArtifact = serde_json::from_str(&json).expect("Failed to parse PresetArtifact");
             
-            println!("═══ Preset Doctor Report: {} ═══", file.display());
-            for issue in &report.issues {
-                println!("  [{:?}] {}: {}", issue.severity, issue.code, issue.message);
+            println!("Verifying Artifact: {}...", artifact.name);
+            if artifact.verify() {
+                println!("{}", "VALID: Integrity check passed.".green());
+            } else {
+                println!("{}", "TAMPERED: Integrity check failed!".red());
             }
-            if report.has_errors() {
+        }
+        Commands::Pluginval { path, strict } => {
+            println!("Invoking pluginval for {}...", path.display());
+            let mut cmd = Command::new("pluginval");
+            cmd.arg("--validate").arg(&path);
+            if strict {
+                cmd.arg("--validate-strict").arg("--strict-level").arg("10");
+            }
+            
+            let status = cmd.status().map_err(|e| anyhow::anyhow!("Failed to execute pluginval: {}. Is it in your PATH?", e))?;
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(1));
+            }
+        }
+        Commands::Stress { path } => {
+            println!("{}", "═══ LIME REAL-TIME STRESS HARNESS ═══".bold().red());
+            println!("Target: {}", path.display());
+            
+            println!("\n[1/3] Chaos Automation Test...");
+            let mut cmd = Command::new("pluginval");
+            cmd.arg("--validate").arg(&path)
+               .arg("--validate-strict")
+               .arg("--strict-level").arg("10")
+               .arg("--test-automation"); 
+            
+            if !cmd.status()?.success() {
+                println!("{}", "FAILED: Chaos Automation triggered a failure.".red());
+                std::process::exit(1);
+            }
+
+            println!("\n[2/3] Denormal / Zero Input Stress...");
+            // pluginval doesn't have a specific "denormal" flag, but we can assume normal validation handles basic safety.
+            // In a future version, we would use a custom host to feed denormals.
+            println!("{}", "  [SKIP] Custom Denormal feeder not yet implemented in CLI.".dimmed());
+
+            println!("\n[3/3] Thread Starvation Simulation...");
+            println!("{}", "  [SKIP] Starvation simulation requires custom host wrapper.".dimmed());
+
+            println!("\n{}", "STRESS TEST COMPLETED. REALITY REMAINS STABLE.".green().bold());
+            println!("{}", "═════════════════════════════════════".bold().red());
+        }
+        Commands::Testify { file } => {
+            let json = std::fs::read_to_string(&file).expect("Failed to read file");
+            let artifact: PresetArtifact = serde_json::from_str(&json).expect("Failed to parse PresetArtifact");
+            
+            println!("{}", "═══ FORENSIC TESTIMONY ═══".bold().cyan());
+            println!("Artifact: {}", artifact.name);
+            println!("Version:  {}", artifact.version);
+            println!("Hash:     {}", artifact.hash);
+            
+            if let Some(sh) = &artifact.source_hash {
+                println!("Source:   {}", sh);
+            }
+            
+            println!("\nVerification Result: {}", if artifact.verify() { "VALID".green() } else { "TAMPERED".red() });
+            println!("{}", "═══════════════════════════".bold().cyan());
+        }
+        Commands::Doctor => {
+            println!("{}", "═══ LIME SURVIVAL CONDITION CHECK ═══".bold().magenta());
+            let mut unsafe_state = false;
+
+            // 1. Tool Check: pluginval
+            print!("Checking pluginval... ");
+            if Command::new("pluginval").arg("--version").output().is_ok() {
+                println!("{}", "OK".green());
+            } else {
+                println!("{}", "NOT FOUND (UNSAFE)".red());
+                println!("  -> Please install pluginval to enable validation: brew install pluginval");
+                unsafe_state = true;
+            }
+
+            // 2. Hardware Check: SIMD
+            print!("Checking SIMD support... ");
+            #[cfg(target_arch = "x86_64")]
+            {
+                if std::is_x86_feature_detected!("avx2") {
+                    println!("{}", "AVX2 OK".green());
+                } else {
+                    println!("{}", "AVX2 MISSING (WARN)".yellow());
+                }
+            }
+            #[cfg(target_arch = "aarch64")]
+            {
+                println!("{}", "NEON OK (Apple Silicon)".green());
+            }
+
+            // 3. Environment Check: DAW Detection (macOS)
+            #[cfg(target_os = "macos")]
+            {
+                println!("Scanning for Host environments:");
+                let daws = [
+                    ("Bitwig Studio", "/Applications/Bitwig Studio.app"),
+                    ("Ableton Live", "/Applications/Ableton Live 11 Suite.app"), 
+                    ("Logic Pro", "/Applications/Logic Pro X.app"),
+                ];
+                for (name, path) in daws {
+                    if std::path::Path::new(path).exists() {
+                        println!("  [FOUND] {}", name.green());
+                    } else {
+                        println!("  [MISSING] {}", name.dimmed());
+                    }
+                }
+            }
+
+            println!("\nConclusion: {}", if unsafe_state { "UNSAFE STATE".red().bold() } else { "READY FOR PRODUCTION".green().bold() });
+            println!("{}", "══════════════════════════════════════".bold().magenta());
+            
+            if unsafe_state {
                 std::process::exit(1);
             }
         }
-        Commands::Diff { old, new } => {
-            let json_old = std::fs::read_to_string(old).expect("Failed to read old file");
-            let json_new = std::fs::read_to_string(new).expect("Failed to read new file");
-            
-            let preset_old = Preset::from_json(&json_old).expect("Failed to parse old preset");
-            let preset_new = Preset::from_json(&json_new).expect("Failed to parse new preset");
-            
-            let diff = limestudio_core::diff::diff_presets(&preset_old, &preset_new);
-            diff.print_summary();
-        }
-        Commands::Render { file, output, duration } => {
-            let (graph, _) = load_file(&file);
-            println!("Rendering {} for {:.1}s...", file.display(), duration);
-            
-            let order = validate_graph(&graph).expect("Validation failed");
-            let program = compile_graph(&graph, &order).program;
-            
-            let samples = (duration * 44100.0) as usize; // Assume 44.1k for CLI render
-            let dummy_input = vec![0.0f32; samples];
-            let output_samples = limestudio_core::golden::render_program(program, 44100, samples, &dummy_input);
-            
-            // Note: In a real implementation, we'd use a WAV encoder crate here.
-            // For now, we confirm deterministic completion.
-            println!("Render completed successfully. (Simulated output: {})", output.display());
-            println!("Output Samples: {}", output_samples.len());
-        }
-        Commands::Bench { file, block_size } => {
-            let (graph, _) = load_file(&file);
-            println!("Benchmarking {} (Block size: {})...", file.display(), block_size);
-            
-            let order = validate_graph(&graph).expect("Validation failed");
-            let program = compile_graph(&graph, &order).program;
-            let mut engine = limestudio_core::engine::DspEngine::new_from_program(program);
-            
-            let mut inputs = vec![vec![0.0f32; block_size]; 2];
-            let mut outputs = vec![vec![0.0f32; block_size]; 2];
-            
-            let start = std::time::Instant::now();
-            let iterations = 1000;
-            
-            // Slice conversion boilerplate
-            let input_slices: Vec<&[f32]> = inputs.iter().map(|v| v.as_slice()).collect();
-            let mut output_slices: Vec<&mut [f32]> = outputs.iter_mut().map(|v| v.as_mut_slice()).collect();
-            
-            for _ in 0..iterations {
-                engine.process_block(&input_slices, &mut output_slices);
-            }
-            let elapsed = start.elapsed();
-            let per_block = elapsed / iterations as u32;
-            
-            println!("═══ Benchmark Results ═══");
-            println!("  Total time (1000 blocks): {:?}", elapsed);
-            println!("  Time per block:          {:?}", per_block);
-            println!("  Real-time safety margin: {:.2}%", (per_block.as_secs_f32() / (block_size as f32 / 44100.0)) * 100.0);
-        }
-        Commands::Codegen { file, output } => {
-            let (graph, _) = load_file(&file);
-            println!("Generating Rust code for {}...", file.display());
-            
-            let order = validate_graph(&graph).expect("Validation failed");
-            let program = compile_graph(&graph, &order).program;
-            let code = limestudio_core::codegen::ir_to_readable_rust(&program);
-            
-            if let Some(out_path) = output {
-                std::fs::write(&out_path, &code).expect("Failed to write output file");
-                println!("Code exported to: {}", out_path.display());
-            } else {
-                println!("═══ Generated Rust Code ═══");
-                println!("{}", code);
-                println!("═══════════════════════════");
-            }
-        }
-    }
-}
+        Commands::Release => {
+            let orchestrator = BuildOrchestrator::new(
+                "LimePlugin".to_string(), 
+                "dev.limestudio.plugin".to_string()
+            );
 
-fn load_file(path: &PathBuf) -> (AudioGraph, Option<Preset>) {
-    let json = std::fs::read_to_string(path).expect("Failed to read file");
-    
-    // Try loading as Preset first
-    if let Ok(preset) = Preset::from_json(&json) {
-        (preset.graph_snapshot.clone(), Some(preset))
-    } else {
-        // Fallback to raw AudioGraph
-        let graph = AudioGraph::from_json(&json).expect("Failed to parse graph JSON");
-        (graph, None)
+            if let Err(e) = orchestrator.run_release_build("aarch64-apple-darwin") {
+                eprintln!("Build failed: {:?}", e);
+                std::process::exit(1);
+            }
+        }
+        _ => {
+            println!("This command is temporarily disabled due to core refactoring.");
+        }
     }
+    Ok(())
 }

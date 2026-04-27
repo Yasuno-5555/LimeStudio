@@ -1,56 +1,34 @@
-pub mod ir;
-pub mod parameter;
-pub mod modulation;
-pub mod sandbox;
+pub mod view;
+pub mod transaction;
+pub mod pipeline;
 pub mod graph;
-pub mod validate;
-pub mod compile;
 pub mod engine;
-pub mod stdlib;
-pub mod polyphony;
-pub mod registry;
-pub mod scripting;
 pub mod preset;
-pub mod param_spec;
-pub mod param_graph;
-pub mod hostile;
-pub mod confidence;
-pub mod golden;
-pub mod codegen;
+pub mod torture;
+pub mod topology;
+pub mod math;
+pub mod time;
+pub mod signal;
+pub mod builder;
 pub mod diff;
-pub mod live;
+pub mod causality;
 pub mod provenance;
-pub mod undo;
+pub mod telemetry;
+#[cfg(test)]
+mod engine_tests;
+pub mod reality_bridge_validation;
+pub mod project;
+pub mod node_discovery;
 
-/// オーディオバッファへのアクセスを抽象化するトレイト
-/// これにより、nih_plugのバッファや自前のVecなど、バックエンドの実装を隠蔽できる
+pub use view::{ViewCache, UiIndex};
+pub use project::ProjectSpec;
+
+/// 汎用的なオーディオバッファインターフェース
 pub trait AudioBuffer {
-    /// チャンネル数
     fn channels(&self) -> usize;
-    /// サンプル数 (ブロックサイズ)
     fn samples(&self) -> usize;
-    
-    /// 指定チャンネルの不変スライスを取得
-    fn channel(&mut self, ch: usize) -> &[f32];
-    
-    /// 指定チャンネルの可変スライスを取得
-    fn channel_mut(&mut self, ch: usize) -> &mut [f32];
-}
-
-/// オーディオ処理を行う全てのユニットが実装すべきトレイト
-pub trait AudioProcessor: Send + Sync {
-    /// 準備処理 (サンプルレート変更時などに呼ばれる)
-    fn prepare(&mut self, context: &ProcessContext);
-
-    /// ブロックごとの処理
-    /// ジェネリクスを使うことで、静的ディスパッチによる最適化を期待する
-    fn process<B: AudioBuffer>(&mut self, buffer: &mut B);
-    
-    /// パラメータの変更 (IDベースの簡易版)
-    fn set_parameter(&mut self, _id: u32, _value: f32) {}
-    
-    /// レイテンシ（サンプル数）を返す
-    fn latency(&self) -> u32 { 0 }
+    fn get_channel(&self, ch: usize) -> &[f32];
+    fn get_channel_mut(&mut self, ch: usize) -> &mut [f32];
 }
 
 /// 処理コンテキスト
@@ -62,6 +40,38 @@ pub struct ProcessContext {
 
 impl ProcessContext {
     pub fn new(sample_rate: f64, max_block_size: usize, num_channels: usize) -> Self {
-        Self { sample_rate, max_block_size, num_channels }
+        Self {
+            sample_rate,
+            max_block_size,
+            num_channels,
+        }
     }
+}
+
+/// 基本的なオーディオプロセッサートレイト
+pub trait AudioProcessor: Send + Sync {
+    fn prepare(&mut self, context: &ProcessContext);
+    fn process<B: AudioBuffer>(&mut self, buffer: &mut B);
+    fn latency(&self) -> u32 { 0 }
+    fn set_parameter(&mut self, _id: u32, _value: f32) {}
+}
+
+#[derive(Debug, Clone)]
+pub enum Intent {
+    AddNode { kind: String, position: [f32; 2] },
+    RemoveNode(UiIndex),
+    MoveNode { node_id: UiIndex, position: [f32; 2] },
+    Connect { from: UiIndex, to: UiIndex },
+    TweakParam { node_id: UiIndex, param: String, value: f32 },
+    EndTweak { node_id: UiIndex, param: String },
+    SelectNodes(Vec<UiIndex>),
+}
+
+/// リアルタイムオーディオスレッド向けの軽量なパラメータ更新イベント
+#[derive(Debug, Clone)]
+pub enum PatchEvent {
+    SetParameter { 
+        param_id: String, // NIH-plug parameter ID
+        value: f32 
+    },
 }

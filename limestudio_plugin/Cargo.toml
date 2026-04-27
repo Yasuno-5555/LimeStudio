@@ -7,6 +7,18 @@ edition = "2021"
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-limestudio_core = { path = "../limestudio_core" }
-limestudio_dsp = { path = "../limestudio_dsp" }
-nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+nih_plug.workspace = true
+limestudio_core = { workspace = true }
+limestudio_macro = { path = "../limestudio_macro" }
+limestudio_surface = { workspace = true }
+dirtydata-core = { workspace = true }
+dirtydata-runtime = { workspace = true }
+dirtydata-observer = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rtrb = { workspace = true }
+ulid = { workspace = true }
+wgpu = { workspace = true }
+raw-window-handle = "0.6"
+pollster = { workspace = true }
+once_cell = { workspace = true }

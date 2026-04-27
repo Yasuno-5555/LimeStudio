@@ -42,8 +42,8 @@ impl SpectralAnalyzer {
         let len = input.len().min(self.fft_size);
         
         // Windowing & Copy
-        for i in 0..len {
-            self.fft_input[i] = Complex::new(input[i] as f64 * self.window[i], 0.0);
+        for (i, val) in input.iter().enumerate().take(len) {
+            self.fft_input[i] = Complex::new(*val as f64 * self.window[i], 0.0);
         }
         for i in len..self.fft_size {
             self.fft_input[i] = Complex64::zero();
@@ -114,7 +114,7 @@ pub struct WaveletProcessor {
     synthesizers: Vec<ScaleSynthesizer>,
     
     // Parameters
-    scales: Vec<f64>,
+    _scales: Vec<f64>,
     smoothers: Vec<Smoother>,
     
     // Visualizer
@@ -122,7 +122,7 @@ pub struct WaveletProcessor {
     
     fft_size: usize,
     hop_size: usize,
-    sample_rate: f64,
+    _sample_rate: f64,
 }
 
 impl WaveletProcessor {
@@ -151,8 +151,8 @@ impl WaveletProcessor {
         let mut kernels: Vec<Vec<Complex64>> = Vec::with_capacity(num_scales);
         let mut freq_sum = vec![0.0; fft_size];
 
-        for s_idx in 0..num_scales {
-            let freq_target = scales[s_idx];
+        for scale_freq in scales.iter().take(num_scales) {
+            let freq_target = *scale_freq;
             let w0 = 6.0; 
             let scale = w0 / (2.0 * std::f64::consts::PI * freq_target / sample_rate);
             
@@ -175,8 +175,8 @@ impl WaveletProcessor {
         for k in 0..fft_size {
             if freq_sum[k] > 1e-6 {
                 let norm_factor = 1.0 / freq_sum[k];
-                for s_idx in 0..num_scales {
-                    kernels[s_idx][k] *= norm_factor;
+                for kernel in kernels.iter_mut().take(num_scales) {
+                    kernel[k] *= norm_factor;
                 }
             }
         }
@@ -194,12 +194,12 @@ impl WaveletProcessor {
         Self {
             analyzer,
             synthesizers,
-            scales,
+            _scales: scales,
             smoothers,
             monitor_sender: None,
             fft_size,
             hop_size,
-            sample_rate,
+            _sample_rate: sample_rate,
         }
     }
 
@@ -230,7 +230,7 @@ impl WaveletProcessor {
         // We collect gains into a temporary vector to pass to par_iter
         
         let current_gains: Vec<f64> = self.smoothers.iter_mut()
-            .map(|s| s.next() as f64)
+            .map(|s| s.tick() as f64)
             .collect();
 
         let synthesizers = &mut self.synthesizers;

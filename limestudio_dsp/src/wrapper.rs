@@ -46,6 +46,7 @@ impl WaveletEngineWrapper {
         }
     }
     
+    #[allow(clippy::type_complexity)]
     pub fn attach_monitor(&mut self) -> Option<Consumer<Vec<f32>, Arc<HeapRb<Vec<f32>>>>> {
         let fft_size = 2048; // Must match the processor's fft_size
         let ring = HeapRb::<Vec<f32>>::new(16);
@@ -116,7 +117,7 @@ impl AudioProcessor for WaveletEngineWrapper {
         let num_channels = buffer.channels();
 
         // 1. 入力データの取得 (Channel 0のみを暫定的に使用)
-        self.input_scratch[..num_samples].copy_from_slice(buffer.channel(0));
+        self.input_scratch[..num_samples].copy_from_slice(buffer.get_channel(0));
 
         // 2. 処理の実行
         // self.process() を呼び出す代わりに、フィールドを分解して借用することで
@@ -131,7 +132,7 @@ impl AudioProcessor for WaveletEngineWrapper {
 
         // 3. 出力データへの書き戻し
         for ch in 0..num_channels {
-            let dest = buffer.channel_mut(ch);
+            let dest = buffer.get_channel_mut(ch);
             dest.copy_from_slice(&self.output_scratch[..num_samples]);
         }
     }

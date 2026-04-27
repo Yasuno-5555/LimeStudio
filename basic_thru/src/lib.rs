@@ -1,8 +1,5 @@
 use nih_plug::prelude::*;
 use limestudio_dsp::wrapper::WaveletEngineWrapper;
-use limestudio_core::ProcessContext;
-use ringbuf::{RingBuffer, Consumer};
-use std::sync::Arc;
 use std::sync::Arc;
 
 mod editor;
@@ -17,6 +14,16 @@ pub struct BasicThru {
     
     // Sample Rate
     sample_rate: f32,
+}
+
+impl Default for BasicThru {
+    fn default() -> Self {
+        Self {
+            params: Arc::new(BasicThruParams::default()),
+            engine: None,
+            sample_rate: 44100.0,
+        }
+    }
 }
 
 #[derive(Params)]
@@ -101,11 +108,16 @@ impl Plugin for BasicThru {
         )
     }
 
-    fn initialize(&mut self, _bus_config: &BusConfig, buffer_config: &BufferConfig) -> bool {
+    fn initialize(
+        &mut self,
+        _audio_io_layout: &AudioIOLayout,
+        buffer_config: &BufferConfig,
+        _context: &mut impl InitContext<Self>,
+    ) -> bool {
         self.sample_rate = buffer_config.sample_rate;
         
         // Waveletエンジンの初期化
-        let mut engine = WaveletEngineWrapper::new(self.sample_rate as f64, 5); // 5 scales
+        let engine = WaveletEngineWrapper::new(self.sample_rate as f64, 5); // 5 scales
 
         // レイテンシ報告 (Context経由ではなく戻り値/trait methodはない、set_latency_samplesはcontextにある)
         // initializeにはcontextがない。processまで待つか？
@@ -121,7 +133,7 @@ impl Plugin for BasicThru {
         true
     }
 
-    fn process(&mut self, buffer: &mut Buffer, _aux: &mut AuxiliaryBuffers, context: &mut ProcessContext) -> ProcessStatus {
+    fn process(&mut self, buffer: &mut Buffer, _aux: &mut AuxiliaryBuffers, context: &mut impl nih_plug::prelude::ProcessContext<Self>) -> ProcessStatus {
         if let Some(engine) = &mut self.engine {
             // レイテンシ報告 (一度だけで良いが、毎回呼んでもコストは低い)
             // 変更があった場合のみ呼ぶのがベストだが、ここではシンプルに。
@@ -135,25 +147,20 @@ impl Plugin for BasicThru {
             engine.set_scale_gain(4, self.params.gain_4.value() as f64);
 
             // 処理
-            let (inputs, mut outputs) = buffer.as_mut_slices();
+            let slices = buffer.as_slice();
             
             // Channel 0 (Left)
-            if inputs.len() > 0 && outputs.len() > 0 {
-                // inputs[0] is channel 0 data
-                engine.process(inputs[0], outputs[0]);
+            if !slices.is_empty() {
+                // slices[0] is channel 0 data
+                let input = slices[0].to_vec();
+                engine.process(&input, slices[0]);
                 
                 // Copy to Right channel if exists (Mono to Stereo Thru)
-                if outputs.len() > 1 && inputs.len() > 0 {
-                    // Note: copy_from_slice panics if lengths differ.
-                    // nih_plug guarantees equal lengths for active channels usually.
-                    // But inputs and outputs might differ in channel count?
-                    // as_mut_slices returns slices of channels.
-                    // outputs[1] is &mut [f32].
-                    
+                if slices.len() > 1 {
                     // Simple logic: if stereo out, copy L to R
-                    let (l, r) = outputs.split_at_mut(1);
+                    let (l, r) = slices.split_at_mut(1);
                     // l[0] is processed.
-                    r[0].copy_from_slice(&l[0]);
+                    r[0].copy_from_slice(l[0]);
                 }
             }
         }
@@ -168,6 +175,14 @@ impl Vst3Plugin for BasicThru {
         Vst3SubCategory::Fx,
         Vst3SubCategory::Tools,
     ];
+}
+
+impl ClapPlugin for BasicThru {
+    const CLAP_ID: &'static str = "dev.limestudio.basic-thru";
+    const CLAP_DESCRIPTION: Option<&'static str> = Some("Basic Thru Plugin");
+    const CLAP_MANUAL_URL: Option<&'static str> = None;
+    const CLAP_SUPPORT_URL: Option<&'static str> = None;
+    const CLAP_FEATURES: &'static [ClapFeature] = &[ClapFeature::AudioEffect];
 }
 
 nih_export_clap!(BasicThru);

@@ -1,276 +1,139 @@
-use crate::ir::IrOp;
-use serde::{Serialize, Deserialize};
+pub use dirtydata_core::types::StableId;
+use std::collections::HashMap;
 
-/// グラフ内でのノード識別子 (Slot index)
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
-pub struct NodeId(pub usize); // Slot index 直接指定
+#[derive(Debug, Clone)]
+pub enum NodeDef {
+    Input,
+    Output,
+    Processor { kind: String, params: HashMap<String, ParamSource> },
+}
 
-impl std::fmt::Display for NodeId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Node({})", self.0)
+#[derive(Debug, Clone)]
+pub enum ParamSource {
+    Constant(f32),
+    Parameter(String), // Reference to NIH-plug parameter ID
+}
+
+impl From<f32> for ParamSource {
+    fn from(f: f32) -> Self {
+        ParamSource::Constant(f)
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
-pub enum PortType {
-    AudioMono,
-    AudioStereo,
-    Control,
-    Event,
-    Midi,
-    Spectrum,
+#[derive(Debug, Clone)]
+pub struct EdgeDef {
+    pub from_node: StableId,
+    pub from_port: String,
+    pub to_node: StableId,
+    pub to_port: String,
 }
 
-impl std::fmt::Display for PortType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
+pub struct GraphBuilder {
+    pub nodes: HashMap<StableId, NodeDef>,
+    pub edges: Vec<EdgeDef>,
+    input_node: StableId,
+    output_node: StableId,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PortInfo {
-    pub name: String,
-    pub port_type: PortType,
-}
-
-/// グラフのノード定義
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum GraphNode {
-    /// 外部入力 (DAWからの信号)
-    Input { channel: u8 },
-    /// 外部出力 (DAWへの信号)
-    Output { channel: u8 },
-    /// 標準ライブラリノード
-    Stdlib(crate::stdlib::StdlibNode),
-    /// プリミティブ命令によるカスタムノード
-    Custom {
-        ops: Vec<IrOp>,
-        inputs: Vec<PortInfo>,
-        outputs: Vec<PortInfo>,
-    },
-    /// スクリプトによるIR生成ノード
-    Script {
-        source: String,
-        inputs: Vec<PortInfo>,
-        outputs: Vec<PortInfo>,
-    },
-    /// サブグラフを内包するコンテナノード
-    Container {
-        inner_graph: Box<AudioGraph>,
-        inputs: Vec<PortInfo>,
-        outputs: Vec<PortInfo>,
-    },
-}
-
-impl GraphNode {
-    /// 入力ポート情報を返す
-    pub fn input_ports(&self) -> Vec<PortInfo> {
-        match self {
-            GraphNode::Input { .. } => vec![],
-            GraphNode::Output { .. } => vec![PortInfo { name: "in".into(), port_type: PortType::AudioMono }],
-            GraphNode::Stdlib(node) => node.input_ports(),
-            GraphNode::Custom { inputs, .. } => inputs.clone(),
-            GraphNode::Script { inputs, .. } => inputs.clone(),
-            GraphNode::Container { inputs, .. } => inputs.clone(),
-        }
-    }
-
-    /// 出力ポート情報を返す
-    pub fn output_ports(&self) -> Vec<PortInfo> {
-        match self {
-            GraphNode::Input { .. } => vec![PortInfo { name: "out".into(), port_type: PortType::AudioMono }],
-            GraphNode::Output { .. } => vec![],
-            GraphNode::Stdlib(node) => node.output_ports(),
-            GraphNode::Custom { outputs, .. } => outputs.clone(),
-            GraphNode::Script { outputs, .. } => outputs.clone(),
-            GraphNode::Container { outputs, .. } => outputs.clone(),
-        }
-    }
-}
-
-impl std::fmt::Display for GraphNode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            GraphNode::Input { channel } => write!(f, "Input(ch={})", channel),
-            GraphNode::Output { channel } => write!(f, "Output(ch={})", channel),
-            GraphNode::Stdlib(node) => write!(f, "Stdlib({:?})", node),
-            GraphNode::Custom { ops, .. } => write!(f, "Custom({} ops)", ops.len()),
-            GraphNode::Script { source, .. } => write!(f, "Script({} chars)", source.len()),
-            GraphNode::Container { inner_graph, .. } => write!(f, "Container({} nodes)", inner_graph.nodes.len()),
-        }
-    }
-}
-
-/// オーディオグラフ (DAG)
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AudioGraph {
-    pub nodes: Vec<GraphNode>, // index = NodeId
-    pub edges: Vec<(NodeId, u32, NodeId, u32)>, // from, port, to, port
-}
-
-impl AudioGraph {
+impl GraphBuilder {
     pub fn new() -> Self {
+        let input_node = StableId::new();
+        let output_node = StableId::new();
+        let mut nodes = HashMap::new();
+        nodes.insert(input_node, NodeDef::Input);
+        nodes.insert(output_node, NodeDef::Output);
+
         Self {
-            nodes: Vec::new(),
+            nodes,
             edges: Vec::new(),
+            input_node,
+            output_node,
         }
     }
 
-    /// ノードを追加し、そのIDを返す
-    pub fn add_node(&mut self, node: GraphNode) -> NodeId {
-        let id = NodeId(self.nodes.len());
-        self.nodes.push(node);
+    pub fn input_node(&self) -> StableId { self.input_node }
+    pub fn output_node(&self) -> StableId { self.output_node }
+
+    pub fn add_node(&mut self, def: NodeDef) -> StableId {
+        let id = StableId::new();
+        self.nodes.insert(id, def);
         id
     }
 
-    /// ノード間を接続する
-    pub fn add_edge(&mut self, from: NodeId, from_port: u32, to: NodeId, to_port: u32) {
-        self.edges.push((from, from_port, to, to_port));
+    pub fn add_processor(&mut self, kind: &str, params: Vec<(&str, ParamSource)>) -> StableId {
+        let mut p_map = HashMap::new();
+        for (k, v) in params {
+            p_map.insert(k.to_string(), v);
+        }
+        self.add_node(NodeDef::Processor {
+            kind: kind.to_string(),
+            params: p_map,
+        })
     }
 
-    /// グラフの構造をデバッグ出力する
-    pub fn debug_dump(&self) {
-        println!("--- AudioGraph Debug Dump ---");
-        println!("Nodes:");
-        for (i, node) in self.nodes.iter().enumerate() {
-            println!("  [{}] {}", i, node);
-            if let GraphNode::Custom { ops, .. } = node {
-                for (op_idx, op) in ops.iter().enumerate() {
-                    println!("    {:3}: {}", op_idx, op);
+    pub fn add_edge(&mut self, from: StableId, from_port: &str, to: StableId, to_port: &str) {
+        self.edges.push(EdgeDef {
+            from_node: from,
+            from_port: from_port.to_string(),
+            to_node: to,
+            to_port: to_port.to_string(),
+        });
+    }
+
+    pub fn connect(&mut self, from: StableId, to: StableId) {
+        self.add_edge(from, "out", to, "in");
+    }
+
+    pub fn build(self) -> dirtydata_core::ir::Graph {
+        let mut graph = dirtydata_core::ir::Graph::new();
+        
+        // Map our IDs to DirtyData nodes
+        let mut id_map = HashMap::new();
+        
+        for (id, def) in self.nodes {
+            let node = match def {
+                NodeDef::Input => dirtydata_core::ir::Node::new_input_proxy("input"),
+                NodeDef::Output => dirtydata_core::ir::Node::new_output_proxy("output"),
+                NodeDef::Processor { kind, params } => {
+                    let mut node = dirtydata_core::ir::Node::new_processor(&kind);
+                    node.config.insert("name".to_string(), dirtydata_core::types::ConfigValue::String(kind.clone()));
+                    for (k, v) in params {
+                        let val = match v {
+                            ParamSource::Constant(f) => dirtydata_core::types::ConfigValue::Float(f as f64),
+                            ParamSource::Parameter(id) => dirtydata_core::types::ConfigValue::String(format!("param:{}", id)),
+                        };
+                        node.config.insert(k.to_string(), val);
+                    }
+                    node
                 }
-            }
+            };
+            let real_id = node.id;
+            id_map.insert(id, real_id);
+            graph.add_node(node);
+        }
+
+        for edge in self.edges {
+            let source_id = id_map.get(&edge.from_node).unwrap();
+            let target_id = id_map.get(&edge.to_node).unwrap();
             
-            // ポート情報を表示
-            let inputs = node.input_ports();
-            let outputs = node.output_ports();
-            if !inputs.is_empty() {
-                print!("    In: ");
-                for (idx, p) in inputs.iter().enumerate() {
-                    print!("[{}:{}] ", idx, p.port_type);
-                }
-                println!();
-            }
-            if !outputs.is_empty() {
-                print!("    Out: ");
-                for (idx, p) in outputs.iter().enumerate() {
-                    print!("[{}:{}] ", idx, p.port_type);
-                }
-                println!();
-            }
+            let source = dirtydata_core::types::PortRef {
+                node_id: *source_id,
+                port_name: edge.from_port,
+            };
+            let target = dirtydata_core::types::PortRef {
+                node_id: *target_id,
+                port_name: edge.to_port,
+            };
+            
+            let _ = graph.connect(source, target);
         }
-        println!("Edges:");
-        for (from, from_p, to, to_p) in &self.edges {
-            println!("  {} [port {}] -> {} [port {}]", from, from_p, to, to_p);
-        }
-        println!("-----------------------------");
-    }
 
-    /// JSON に変換する
-    pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
-    }
-
-    /// JSON から読み込む
-    pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(json)
+        graph
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ir::IrOp;
-
-    #[test]
-    fn test_serialization() {
-        let mut graph = AudioGraph::new();
-        let in_node = graph.add_node(GraphNode::Input { channel: 0 });
-        let out_node = graph.add_node(GraphNode::Output { channel: 0 });
-        let gain_node = graph.add_node(GraphNode::Custom {
-            ops: vec![
-                IrOp::ReadInput { channel: 0 },
-                IrOp::MulConst(0.5),
-                IrOp::WriteOutput { channel: 0 },
-            ],
-            inputs: vec![PortInfo { name: "in".into(), port_type: PortType::AudioMono }],
-            outputs: vec![PortInfo { name: "out".into(), port_type: PortType::AudioMono }],
-        });
-        graph.add_edge(in_node, 0, gain_node, 0);
-        graph.add_edge(gain_node, 0, out_node, 0);
-
-        let json = graph.to_json().unwrap();
-        let graph2 = AudioGraph::from_json(&json).unwrap();
-        assert_eq!(graph.nodes.len(), graph2.nodes.len());
-        assert_eq!(graph.edges.len(), graph2.edges.len());
-        
-        std::fs::write("test_graph.json", json).unwrap();
-    }
-
-    #[test]
-    fn test_stdlib_gain_compilation() {
-        use crate::stdlib::StdlibNode;
-        use crate::ir::ParamRef;
-        
-        let mut graph = AudioGraph::new();
-        let in_n = graph.add_node(GraphNode::Input { channel: 0 });
-        let gain_n = graph.add_node(GraphNode::Stdlib(StdlibNode::Gain {
-            amount: ParamRef::Const(0.7)
-        }));
-        let out_n = graph.add_node(GraphNode::Output { channel: 0 });
-        
-        graph.add_edge(in_n, 0, gain_n, 0);
-        graph.add_edge(gain_n, 0, out_n, 0);
-        
-        let order = crate::validate::validate_graph(&graph).unwrap();
-        let program = crate::compile::compile_graph(&graph, &order).program;
-        
-        // IRに MulConst(0.7) が含まれているか確認
-        let has_mul_const = program.ops.iter().any(|op| matches!(op, IrOp::MulConst(v) if (*v - 0.7).abs() < 0.001));
-        assert!(has_mul_const);
-        
-        std::fs::write("stdlib_graph.json", graph.to_json().unwrap()).unwrap();
-    }
-
-    #[test]
-    fn test_json_roundtrip_compilation_parity() {
-        use crate::stdlib::*;
-        use crate::ir::ParamRef;
-        use crate::validate::validate_graph;
-        use crate::compile::compile_graph;
-
-        let mut g = AudioGraph::new();
-        let in_n = g.add_node(GraphNode::Input { channel: 0 });
-        let osc = g.add_node(GraphNode::Stdlib(StdlibNode::Oscillator {
-            freq: ParamRef::Const(440.0),
-            wave: Waveform::Sine,
-        }));
-        let mix = g.add_node(GraphNode::Stdlib(StdlibNode::Mix {
-            ratio: ParamRef::Const(0.5),
-        }));
-        let out_n = g.add_node(GraphNode::Output { channel: 0 });
-        
-        g.add_edge(in_n, 0, mix, 0);
-        g.add_edge(osc, 0, mix, 1);
-        g.add_edge(mix, 0, out_n, 0);
-        
-        // Compile original
-        let order1 = validate_graph(&g).unwrap();
-        let prog1 = compile_graph(&g, &order1).program;
-        
-        // Roundtrip
-        let json = g.to_json().unwrap();
-        let g2 = AudioGraph::from_json(&json).unwrap();
-        
-        // Compile restored
-        let order2 = validate_graph(&g2).unwrap();
-        let prog2 = compile_graph(&g2, &order2).program;
-        
-        // Verify parity
-        assert_eq!(prog1.ops.len(), prog2.ops.len());
-        for (op1, op2) in prog1.ops.iter().zip(prog2.ops.iter()) {
-            assert_eq!(format!("{:?}", op1), format!("{:?}", op2));
-        }
-        assert_eq!(prog1.buffer_count, prog2.buffer_count);
-        assert_eq!(prog1.state_count, prog2.state_count);
+impl Default for GraphBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }

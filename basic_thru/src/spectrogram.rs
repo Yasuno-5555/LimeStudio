@@ -1,11 +1,12 @@
 use nih_plug_vizia::vizia::prelude::*;
 use nih_plug_vizia::vizia::vg::{ImageId, Paint, Path, PixelFormat, ImageFlags}; // femtovg
-use ringbuf::Consumer;
+use std::sync::Arc;
 use std::cell::RefCell;
 
 pub struct Spectrogram {
     // 外部から渡されるデータ受信機
-    consumer: RefCell<Consumer<Vec<f32>>>,
+    #[allow(clippy::type_complexity)]
+    consumer: RefCell<ringbuf::Consumer<Vec<f32>, Arc<ringbuf::HeapRb<Vec<f32>>>>>,
     
     // 描画用の内部状態
     image_id: RefCell<Option<ImageId>>, // GPUテクスチャID
@@ -17,7 +18,7 @@ pub struct Spectrogram {
 }
 
 impl Spectrogram {
-    pub fn new(cx: &mut Context, consumer: Consumer<Vec<f32>>) -> Handle<Self> {
+    pub fn new(cx: &mut Context, consumer: ringbuf::Consumer<Vec<f32>, Arc<ringbuf::HeapRb<Vec<f32>>>>) -> Handle<'_, Self> {
         // 例: 幅512px, 高さ256px のスペクトログラム
         // GUI上の表示サイズとは独立した「内部解像度」
         let width = 512;
@@ -66,7 +67,7 @@ impl Spectrogram {
         // ここでは「溜まっている分だけスクロール」させることで、高速な更新にも追従させる
         // ただし、1フレームで進みすぎると見にくいので制限をかけてもいい
         
-        let mut processed_some = false;
+        let mut _processed_some = false;
         
         // バッファを借用
         let mut buffer = self.pixel_buffer.borrow_mut();
@@ -77,10 +78,10 @@ impl Spectrogram {
 
         while let Some(spectrum) = consumer.pop() {
             dirty = true;
-            processed_some = true;
+            _processed_some = true;
             
             // 1. 画像全体を左に1ピクセルずらす
-            let row_bytes = self.width * 4;
+            let _row_bytes = self.width * 4;
             // メモリコピーによるシフト
             for y in 0..self.height {
                 let row_start = y * self.width * 4;
@@ -93,6 +94,7 @@ impl Spectrogram {
             // 2. 右端 (x = width - 1) に新しいデータを書き込む
             // spectrum は周波数ビンごとの配列 (サイズは fft_size/2 くらい)
             // height (256) に合わせてリサンプリング
+            let spectrum: &Vec<f32> = &spectrum;
             let spec_len = spectrum.len();
             if spec_len > 0 {
                 for y in 0..self.height {
@@ -155,9 +157,17 @@ impl View for Spectrogram {
 
         if let Some(id) = *image_id {
             if dirty {
-                // ピクセルデータをGPUに転送
                 let buffer = self.pixel_buffer.borrow();
-                canvas.update_image(id, &buffer, 0, 0, self.width, self.height)
+                // Create an ImageSource from the raw buffer with correct pixel format
+                let rgba_buffer: &[nih_plug_vizia::vizia::vg::rgb::RGBA8] = unsafe {
+                    std::slice::from_raw_parts(buffer.as_ptr() as *const _, buffer.len() / 4)
+                };
+                let img_ref = nih_plug_vizia::vizia::vg::imgref::ImgRef::new(
+                    rgba_buffer,
+                    self.width,
+                    self.height
+                );
+                canvas.update_image(id, img_ref, 0, 0)
                     .unwrap(); // update_image returns Result
             }
 
@@ -170,7 +180,7 @@ impl View for Spectrogram {
             
             let mut path = Path::new();
             path.rect(bounds.x, bounds.y, bounds.w, bounds.h);
-            canvas.fill_path(&mut path, &paint);
+            canvas.fill_path(&path, &paint);
         }
     }
 }

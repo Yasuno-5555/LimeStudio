@@ -4,10 +4,9 @@
 //! DAWのウィンドウハンドル(HWND/NSView/X11)にWGPUを安全に割り込ませるための最下層ブリッジ。
 
 use raw_window_handle::{
-    RawWindowHandle, RawDisplayHandle, HasRawWindowHandle, HasRawDisplayHandle,
-    HandleError,
+    RawWindowHandle, RawDisplayHandle, HasWindowHandle, HasDisplayHandle,
+    WindowHandle, DisplayHandle, HandleError,
 };
-use std::sync::Arc;
 
 /// ホストから渡された生のウィンドウハンドルを保持するラッパー
 pub struct ExternalWindowHandle {
@@ -15,15 +14,15 @@ pub struct ExternalWindowHandle {
     pub raw_display: RawDisplayHandle,
 }
 
-unsafe impl HasRawWindowHandle for ExternalWindowHandle {
-    fn raw_window_handle(&self) -> Result<RawWindowHandle, HandleError> {
-        Ok(self.raw_window)
+impl HasWindowHandle for ExternalWindowHandle {
+    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+        unsafe { Ok(WindowHandle::borrow_raw(self.raw_window)) }
     }
 }
 
-unsafe impl HasRawDisplayHandle for ExternalWindowHandle {
-    fn raw_display_handle(&self) -> Result<RawDisplayHandle, HandleError> {
-        Ok(self.raw_display)
+impl HasDisplayHandle for ExternalWindowHandle {
+    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+        unsafe { Ok(DisplayHandle::borrow_raw(self.raw_display)) }
     }
 }
 

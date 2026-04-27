@@ -1,13 +1,107 @@
 [workspace]
 members = [
     "limestudio_core",
-    "limestudio_dsp",
-    "limestudio_plugin",
-    "basic_thru",
-    "basic_gain",
-    "limestudio_cli",
-    "poly_sine",
     "limestudio_vpl",
     "limestudio_surface",
+    "limestudio_macro",
+    "limestudio_cli",
+    "limestudio_dsp",
+    "limestudio_plugin",
+    "limestudio_lint",
+    "squeezer",
+    "basic_gain",
+    "basic_thru",
+    "poly_sine",
+    "templates/dangerous-fx-lab",
+    "templates/mix-doctor",
+    "templates/limestudio-synth",
+    # DirtyData Crates
+    "DirtyData/crates/dirtydata-core",
+    "DirtyData/crates/dirtydata-runtime",
+    "DirtyData/crates/dirtydata-observer",
+    "DirtyData/crates/dirtydata-host",
+    "DirtyData/crates/dirtydata-intent",
+    "DirtyData/crates/dirtydata-cli",
+    "DirtyData/crates/dirty-exporter",
+    "DirtyData/crates/dirty-mutate",
+    "DirtyData/crates/dirtydata-sdk",
+    "DirtyData/crates/tutorial-bitcrush",
+    "DirtyData/crates/dirtydata-python",
+    "DirtyData/crates/dirtydata-dsp-bbd",
+    "DirtyData/crates/dirtydata-dsp-chaos",
+    "DirtyData/crates/dirtydata-dsp-circuit",
+    "DirtyData/crates/dirtydata-dsp-clipper",
+    "DirtyData/crates/dirtydata-dsp-control",
+    "DirtyData/crates/dirtydata-dsp-cv",
+    "DirtyData/crates/dirtydata-dsp-destruction",
+    "DirtyData/crates/dirtydata-dsp-ks",
+    "DirtyData/crates/dirtydata-dsp-matrix",
+    "DirtyData/crates/dirtydata-dsp-modal",
+    "DirtyData/crates/dirtydata-dsp-reaction",
+    "DirtyData/crates/dirtydata-dsp-spectral",
+    "DirtyData/crates/dirtydata-dsp-spring",
+    "DirtyData/crates/dirtydata-dsp-svf",
+    "DirtyData/crates/dirtydata-dsp-tape",
+    "DirtyData/crates/dirtydata-dsp-vocal",
+    "DirtyData/crates/dirtydata-dsp-wdf",
+    "DirtyData/crates/dirtydata-dsp-zdf",
 ]
 resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "LimeStudio + DirtyData: Native Core Audio Environment"
+repository = "https://github.com/Yasuno-5555/LimeStudio"
+homepage = "https://github.com/Yasuno-5555/LimeStudio"
+keywords = ["audio", "dsp", "forensic", "vpl", "wgpu"]
+
+[workspace.dependencies]
+# Shared
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ulid = { version = "1", default-features = false, features = ["serde", "std"] }
+blake3 = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+crossbeam-channel = "0.5"
+anyhow = "1.0"
+log = "0.4"
+parking_lot = "0.12"
+rtrb = "0.3"
+pollster = "0.3"
+once_cell = "1.19"
+# UI / Graphics
+wgpu = "22.1"
+winit = "0.30"
+glyphon = "0.6"
+glam = { version = "0.24", features = ["bytemuck"] }
+bytemuck = { version = "1.13", features = ["derive"] }
+taffy = { version = "0.3.11", features = ["serde"] }
+egui = "0.29"
+eframe = { version = "0.29", features = ["wgpu"] }
+
+# Scripting / Logic
+toml = "0.7"
+proptest = "1"
+
+# Audio / Plugin
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+ringbuf = "0.3"
+
+# Macro support
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
+proc-macro2 = "1"
+
+# Internal Crates
+limestudio_core = { path = "limestudio_core" }
+limestudio_dsp = { path = "limestudio_dsp" }
+limestudio_surface = { path = "limestudio_surface" }
+limestudio_plugin = { path = "limestudio_plugin" }
+limestudio_lint = { path = "limestudio_lint" }
+dirtydata-core = { path = "DirtyData/crates/dirtydata-core" }
+dirtydata-runtime = { path = "DirtyData/crates/dirtydata-runtime" }
+dirtydata-observer = { path = "DirtyData/crates/dirtydata-observer" }

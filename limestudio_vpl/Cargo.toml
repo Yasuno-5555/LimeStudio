@@ -1,12 +1,31 @@
 [package]
 name = "limestudio_vpl"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "limestudio_vpl"
+path = "src/main.rs"
 
 [dependencies]
 limestudio_core = { path = "../limestudio_core" }
-egui = "0.29"
-eframe = "0.29"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-anyhow = "1.0"
+dirtydata-core = { path = "../DirtyData/crates/dirtydata-core" }
+dirtydata-runtime = { path = "../DirtyData/crates/dirtydata-runtime" }
+dirtydata-intent = { path = "../DirtyData/crates/dirtydata-intent" }
+limestudio_graph = { path = "../limestudio_graph" }
+limestudio_surface = { path = "../limestudio_surface" }
+anyhow.workspace = true
+serde.workspace = true
+ulid.workspace = true
+wgpu.workspace = true
+glam.workspace = true
+bytemuck.workspace = true
+tokio = { version = "1", features = ["full"] }
+pollster = { workspace = true }
+winit = "0.30"
+env_logger = "0.11"
+eframe.workspace = true
+egui.workspace = true

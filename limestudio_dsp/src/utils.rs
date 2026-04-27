@@ -38,7 +38,7 @@ impl Smoother {
     }
 
     /// 次の値を計算して返す
-    pub fn next(&mut self) -> f32 {
+    pub fn tick(&mut self) -> f32 {
         if (self.target_value - self.current_value).abs() > 1e-5 {
             self.current_value += self.step_size;
             // Check overshoot
@@ -74,16 +74,16 @@ mod tests {
         assert_eq!(smoother.current(), 0.0);
         
         // Step 1: 0.2
-        assert!((smoother.next() - 0.2).abs() < 1e-5);
+        assert!((smoother.tick() - 0.2).abs() < 1e-5);
         // Step 2: 0.4
-        assert!((smoother.next() - 0.4).abs() < 1e-5);
+        assert!((smoother.tick() - 0.4).abs() < 1e-5);
         // Step 3: 0.6
-        assert!((smoother.next() - 0.6).abs() < 1e-5);
+        assert!((smoother.tick() - 0.6).abs() < 1e-5);
         // Step 4: 0.8
-        assert!((smoother.next() - 0.8).abs() < 1e-5);
+        assert!((smoother.tick() - 0.8).abs() < 1e-5);
         // Step 5: 1.0 (Reached)
-        assert!((smoother.next() - 1.0).abs() < 1e-5);
+        assert!((smoother.tick() - 1.0).abs() < 1e-5);
         // Step 6: 1.0 (Clamped)
-        assert!((smoother.next() - 1.0).abs() < 1e-5);
+        assert!((smoother.tick() - 1.0).abs() < 1e-5);
     }
 }

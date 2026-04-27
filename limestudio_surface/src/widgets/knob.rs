@@ -5,6 +5,7 @@
 use glam::Vec2;
 use crate::motion::MotionState;
 use crate::color::Color;
+use crate::ui_ir::{SurfacePrimitive, ArcKind, TemporalStrategy, IndicatorKind, SurfaceId, ContradictionSeverity};
 
 pub struct KnobConfig {
     pub min: f32,
@@ -35,6 +36,7 @@ pub struct KnobState {
     pub is_dragging: bool,
     pub drag_mode: DragMode,
     pub interaction: KnobInteraction,
+    pub contradiction: Option<(ContradictionSeverity, String)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,13 +53,15 @@ pub struct KnobInteraction {
 }
 
 pub struct ParamKnob {
-    pub id: u32,
+    pub id: SurfaceId,
+    pub param_id: String,
     pub label: String,
     pub position: Vec2,
     pub radius: f32,
     pub state: KnobState,
     pub config: KnobConfig,
-    /// Trust UI: 描画用の色とグロー設定
+    pub is_focused: bool,
+    /// Trust UI: 描画用の色 (Glow は法により禁止)
     pub colors: KnobColors,
 }
 
@@ -65,16 +69,16 @@ pub struct KnobColors {
     pub base: Color,
     pub active: Color,
     pub mod_ring: Color,
-    pub glow_intensity: f32,
 }
 
 impl ParamKnob {
-    pub fn new(id: u32, label: String, position: Vec2) -> Self {
+    pub fn new(id: SurfaceId, param_id: String, label: String, position: Vec2) -> Self {
         Self {
             id,
+            param_id,
             label,
             position,
-            radius: 20.0,
+            radius: 24.0, // HIG: 8px grid (24 = 8 * 3)
             state: KnobState {
                 value: MotionState::new(0.5),
                 modulation: MotionState::new(0.0),
@@ -85,35 +89,88 @@ impl ParamKnob {
                     value_at_start: 0.5,
                     is_precision: false,
                 },
+                contradiction: None,
             },
             config: KnobConfig::default(),
+            is_focused: false,
             colors: KnobColors {
                 base: Color::BG_PANEL,
                 active: Color::ACCENT_LIME,
                 mod_ring: Color::MOD_RANGE,
-                glow_intensity: 0.0,
             },
         }
     }
 
-    /// モジュレーションリングの描画パラメータを計算
-    /// (start_angle, end_angle, is_modulating)
-    pub fn get_ring_params(&self) -> (f32, f32, bool) {
-        let base = self.state.value.value;
-        let mod_val = self.state.modulation.value;
-        let is_mod = (mod_val - base).abs() > 0.001;
-        
-        // 0.0 .. 1.0 を -140度 .. 140度に変換
-        let start = -140.0;
-        let end = -140.0 + (base * 280.0);
-        
-        (start, end, is_mod)
-    }
-}
+    /// Convert the knob state into low-level surface primitives.
+    /// Follows the "Law of Lime" (HIG v3.0).
+    pub fn build_primitives(&self) -> Vec<SurfacePrimitive> {
+        let mut primitives = Vec::new();
+        let center = [self.position.x, self.position.y];
 
-/// Badge definitions for Trust UI
-pub struct KnobBadges {
-    pub has_automation: bool,
-    pub has_midi_learn: bool,
-    pub provenance_source: Option<String>,
+        // 0. Focus Ring (The Civilization)
+        if self.is_focused {
+            primitives.push(SurfacePrimitive::FocusRing {
+                id: self.id,
+                rect: [self.position.x - self.radius, self.position.y - self.radius, self.radius * 2.0, self.radius * 2.0],
+                color: Color::ACCENT_BLUE.to_array(),
+                temporal: TemporalStrategy::Standard(0.06),
+            });
+        }
+        
+        // 0.1 Contradiction Marker (The Discord)
+        if let Some((severity, desc)) = &self.state.contradiction {
+            primitives.push(SurfacePrimitive::ContradictionMarker {
+                id: self.id,
+                rect: [self.position.x - self.radius - 8.0, self.position.y - self.radius - 8.0, (self.radius + 8.0) * 2.0, (self.radius + 8.0) * 2.0],
+                severity: *severity,
+                description: desc.clone(),
+            });
+        }
+
+        // 1. Value Ring (The Law: 280-degree sweep)
+        let base_val = self.state.value.value;
+        let start_angle = -140.0;
+        let end_angle = -140.0 + (base_val * 280.0);
+        
+        primitives.push(SurfacePrimitive::Arc {
+            id: self.id,
+            center,
+            radius: self.radius,
+            thickness: 4.0,
+            start_angle,
+            end_angle,
+            kind: ArcKind::Value,
+            temporal: TemporalStrategy::Standard(0.06), // 60ms
+        });
+
+        // 2. Modulation Range (Forensic Trace)
+        let mod_val = self.state.modulation.value;
+        if (mod_val - base_val).abs() > 0.001 {
+            let mod_start = end_angle;
+            let mod_end = -140.0 + (mod_val * 280.0);
+            
+            primitives.push(SurfacePrimitive::Arc {
+                id: self.id, 
+                center,
+                radius: self.radius + 6.0, 
+                thickness: 2.0,
+                start_angle: mod_start,
+                end_angle: mod_end,
+                kind: ArcKind::Modulation,
+                temporal: TemporalStrategy::Fast(0.02), // 20ms for modulation
+            });
+        }
+
+        // 3. Knob Cap (Center Indicator)
+        primitives.push(SurfacePrimitive::Indicator {
+            id: self.id,
+            rect: [center[0] - 8.0, center[1] - 8.0, 16.0, 16.0],
+            kind: IndicatorKind::Led,
+            value: if self.state.is_dragging { 1.0 } else { 0.5 },
+            color: if self.state.is_dragging { self.colors.active.to_array() } else { self.colors.base.to_array() },
+            temporal: TemporalStrategy::Standard(0.06),
+        });
+
+        primitives
+    }
 }

@@ -12,3 +12,4 @@ limestudio_plugin = { path = "../limestudio_plugin" } # Still needed for re-expo
 limestudio_dsp = { path = "../limestudio_dsp" }
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git" }
 nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+ringbuf = "0.3"
