@@ -45,6 +45,8 @@ members = [
     "DirtyData/crates/dirtydata-dsp-vocal",
     "DirtyData/crates/dirtydata-dsp-wdf",
     "DirtyData/crates/dirtydata-dsp-zdf",
+    "DirtyData/crates/dirtydata-dsp-fft",
+    "DirtyData/crates/dirtydata-dsp-wavelet",
 ]
 resolver = "2"
 

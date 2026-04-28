@@ -12,6 +12,14 @@ struct VertexOutput {
     @location(6) params2: vec4<f32>,
 }
 
+struct CameraUniform {
+    view_proj: mat4x4<f32>,
+    time: f32,
+};
+
+@group(0) @binding(0)
+var<uniform> camera: CameraUniform;
+
 @vertex
 fn vs_main(
     @builtin(vertex_index) in_vertex_index: u32,
@@ -34,8 +42,8 @@ fn vs_main(
     else if (in_vertex_index == 3u) { pos = vec2<f32>(1.0, -1.0); uv = vec2<f32>(1.0, -1.0); }
 
     var out: VertexOutput;
-    // Map screen space to clip space (Simplified, assuming 1:1 for now)
-    out.clip_position = vec4<f32>(position + pos * size, 0.0, 1.0);
+    out.clip_position = camera.view_proj * vec4<f32>(position + pos * size, 0.0, 1.0);
+
     out.uv = uv;
     out.color = color;
     out.shape_type = shape_type;

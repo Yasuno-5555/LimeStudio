@@ -5,6 +5,14 @@ pub mod lens_renderer;
 pub mod text_renderer;
 pub mod waveform_renderer;
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct GlobalUniforms {
+    pub view_proj: glam::Mat4,
+    pub time: f32,
+    pub _pad: [f32; 3],
+}
+
 pub struct SurfaceRenderer {
     pub typography: text_renderer::TypographySystem,
     pub sdf: sdf::SdfPipeline,
@@ -23,7 +31,7 @@ impl SurfaceRenderer {
 
         let global_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Global Uniform Buffer"),
-            size: 16, // vec4
+            size: std::mem::size_of::<GlobalUniforms>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -38,6 +46,7 @@ impl SurfaceRenderer {
                 },
             ],
         });
+
 
         Self {
             typography,
@@ -55,17 +64,76 @@ impl SurfaceRenderer {
         queue: &wgpu::Queue, 
         view: &wgpu::TextureView, 
         time: f32,
+        view_proj: glam::Mat4,
         instances: &[sdf::SdfInstance],
-        cables: &[cable_renderer::CableInstance],
+        primitives: &[crate::ui_ir::SurfacePrimitive],
     ) {
+
         // 1. Update Uniforms
-        queue.write_buffer(&self.global_uniform_buffer, 0, bytemuck::bytes_of(&time));
+        let uniforms = GlobalUniforms {
+            view_proj,
+            time,
+            _pad: [0.0; 3],
+        };
+        queue.write_buffer(&self.global_uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
 
-        // 2. Update instance buffers
+        // 2. Collect and update Cable instances from primitives
+        let mut active_cables = Vec::new();
+        for prim in primitives {
+            if let crate::ui_ir::SurfacePrimitive::Curve { control_points, color, thickness, kind, .. } = prim {
+                if control_points.len() >= 2 {
+                    let start = glam::Vec2::from(control_points[0]);
+                    let end = glam::Vec2::from(control_points[control_points.len() - 1]);
+                    
+                    // Simple logic for automatic control points if not provided
+                    let (cp1, cp2) = if control_points.len() >= 4 {
+                        (glam::Vec2::from(control_points[1]), glam::Vec2::from(control_points[2]))
+                    } else {
+                        // Horizontal "S" curve logic for node cables
+                        let dx = (end.x - start.x).abs().max(40.0);
+                        (start + glam::vec2(dx * 0.5, 0.0), end - glam::vec2(dx * 0.5, 0.0))
+                    };
+
+                    let (speed, intensity) = match kind {
+                        crate::ui_ir::CurveKind::Flow { direction: _, phase: _, density: _ } => (2.0, 0.5),
+                        _ => (0.0, 0.0),
+                    };
+
+                    active_cables.push(cable_renderer::CableInstance {
+                        start,
+                        end,
+                        cp1,
+                        cp2,
+                        color: glam::Vec4::from(*color),
+                        thickness: *thickness,
+                        intensity,
+                        speed,
+                        phase: 0.0,
+                    });
+                }
+            }
+        }
+
         self.sdf.write_instances(queue, instances);
-        queue.write_buffer(&self.cable.instance_buffer, 0, bytemuck::cast_slice(cables));
+        if !active_cables.is_empty() {
+            queue.write_buffer(&self.cable.instance_buffer, 0, bytemuck::cast_slice(&active_cables));
+        }
 
-        // 3. Begin render pass
+        // 3. Update Text
+        self.typography.clear();
+        for prim in primitives {
+            if let crate::ui_ir::SurfacePrimitive::Text { rect, text, font_size, color, .. } = prim {
+                self.typography.add_text(
+                    text, 
+                    glam::Vec2::new(rect[0], rect[1]), 
+                    *font_size, 
+                    *font_size * 1.2, 
+                    crate::color::Color::from_rgba_f32(color[0], color[1], color[2], color[3])
+                );
+            }
+        }
+
+        // 4. Begin render pass
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Surface Render Encoder"),
         });
@@ -92,15 +160,20 @@ impl SurfaceRenderer {
             });
 
             // Draw SDF shapes (Nodes, Knobs, Rings)
-            rpass.set_pipeline(&self.sdf.pipeline);
-            rpass.set_vertex_buffer(0, self.sdf.instance_buffer.slice(..));
-            rpass.draw(0..4, 0..instances.len() as u32);
+            self.sdf.draw(&mut rpass, &self.global_bind_group, instances.len() as u32);
 
             // Draw Cables
-            self.cable.draw(&mut rpass, &self.global_bind_group, cables);
+            if !active_cables.is_empty() {
+                self.cable.draw(&mut rpass, &self.global_bind_group, &active_cables);
+            }
+
+
+            // Draw Typography
+            self.typography.render(device, queue, &mut rpass);
         }
 
-        // 4. Submit
+        // 5. Submit
         queue.submit(std::iter::once(encoder.finish()));
     }
 }
+

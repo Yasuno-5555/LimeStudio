@@ -154,7 +154,7 @@ impl ApplicationHandler for VplApp {
                     // 3. Render
                     if let Ok(frame) = surface.get_current_texture() {
                         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                        renderer.render_scene(device, queue, &view, t, &instances, &[]);
+                        renderer.render_scene(device, queue, &view, t, self.surface_engine.camera.view_projection(), &instances, &[]);
                         frame.present();
                     }
                     window.request_redraw();

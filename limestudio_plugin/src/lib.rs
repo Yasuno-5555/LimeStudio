@@ -15,7 +15,7 @@ pub use crate::core::{LimeProcessor, LimeAdapter};
 // UI Components - Strictly Structure Only (Pure Projection)
 pub mod ui {
     use nih_plug::prelude::*;
-    pub use limestudio_surface::ui_ir::{SurfaceWidget as WidgetIR, SurfaceId};
+    pub use limestudio_surface::ui_ir::{SurfaceWidget as WidgetIR, SurfaceId, DisplaySignal};
     pub use limestudio_surface::widgets::trait_def::Widget;
 
     /// A reference to a parameter in the UI projection.
@@ -46,7 +46,7 @@ pub mod ui {
             WidgetIR::Knob {
                 id: SurfaceId::from_seed(self.ui_param.id),
                 label: self.label,
-                signal: dirtydata_core::types::DisplaySignal::Linear(self.ui_param.param.unmodulated_plain_value()),
+                signal: DisplaySignal::Linear(self.ui_param.param.unmodulated_plain_value()),
             }
         }
     }
@@ -56,7 +56,7 @@ pub mod ui {
             WidgetIR::Knob {
                 id: SurfaceId::from_seed(self.ui_param.id),
                 label: self.label.clone(),
-                signal: dirtydata_core::types::DisplaySignal::Linear(self.ui_param.param.unmodulated_plain_value()),
+                signal: DisplaySignal::Linear(self.ui_param.param.unmodulated_plain_value()),
             }
         }
     }
@@ -96,7 +96,7 @@ pub mod ui {
             WidgetIR::Slider {
                 id: SurfaceId::from_seed(self.ui_param.id),
                 label: self.label,
-                signal: dirtydata_core::types::DisplaySignal::Linear(self.ui_param.param.unmodulated_plain_value()),
+                signal: DisplaySignal::Linear(self.ui_param.param.unmodulated_plain_value()),
                 is_vertical: self.is_vertical,
             }
         }
@@ -107,7 +107,7 @@ pub mod ui {
             WidgetIR::Slider {
                 id: SurfaceId::from_seed(self.ui_param.id),
                 label: self.label.clone(),
-                signal: dirtydata_core::types::DisplaySignal::Linear(self.ui_param.param.unmodulated_plain_value()),
+                signal: DisplaySignal::Linear(self.ui_param.param.unmodulated_plain_value()),
                 is_vertical: self.is_vertical,
             }
         }
@@ -366,14 +366,14 @@ pub mod ui {
 
     pub struct LevelMeter {
         id: String,
-        signal: dirtydata_core::types::DisplaySignal,
+        signal: DisplaySignal,
     }
 
     impl LevelMeter {
         pub fn new(id: &str, value: f32, peak: f32) -> Self {
             Self { 
                 id: id.to_string(), 
-                signal: dirtydata_core::types::DisplaySignal::Meter { value, peak } 
+                signal: DisplaySignal::Meter { value, peak } 
             }
         }
         pub fn build(self) -> WidgetIR {

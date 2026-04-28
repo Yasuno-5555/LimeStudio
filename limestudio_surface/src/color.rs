@@ -44,6 +44,11 @@ impl Color {
         Self(Vec4::new(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, a as f32 / 255.0))
     }
 
+    pub fn from_rgba_f32(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self(Vec4::new(r, g, b, a))
+    }
+
+
     pub fn from_hex(hex: &str) -> Self {
         let hex = hex.trim_start_matches('#');
         if hex.len() == 6 {

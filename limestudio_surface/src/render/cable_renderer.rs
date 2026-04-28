@@ -6,6 +6,8 @@ use glam::{Vec2, Vec4};
 pub struct CableInstance {
     pub start: Vec2,
     pub end: Vec2,
+    pub cp1: Vec2,
+    pub cp2: Vec2,
     pub color: Vec4,
     pub thickness: f32,
     pub intensity: f32,
@@ -60,15 +62,18 @@ impl CableRenderer {
                         attributes: &vertex_attr_array![
                             0 => Float32x2, // start
                             1 => Float32x2, // end
-                            2 => Float32x4, // color
-                            3 => Float32,   // thickness
-                            4 => Float32,   // intensity
-                            5 => Float32,   // speed
-                            6 => Float32,   // phase
+                            2 => Float32x2, // cp1
+                            3 => Float32x2, // cp2
+                            4 => Float32x4, // color
+                            5 => Float32,   // thickness
+                            6 => Float32,   // intensity
+                            7 => Float32,   // speed
+                            8 => Float32,   // phase
                         ],
                     },
                 ],
             },
+
             fragment: Some(FragmentState {
                 module: &shader,
                 entry_point: "fs_main",

@@ -11,6 +11,18 @@ pub struct SelectionState {
 }
 
 #[derive(Debug, Clone)]
+pub enum InteractionIntent {
+    Connect { from: SurfaceId, to: SurfaceId },
+    SeekHistory { progress: f32 },
+    Select { ids: Vec<SurfaceId> },
+    MoveNode { id: SurfaceId, delta: Vec2 },
+    UpdateParameter { node_id: SurfaceId, parameter: String, value: f32 },
+    CompileCode { node_id: SurfaceId, source: String },
+}
+
+
+
+#[derive(Debug, Clone)]
 pub enum DragSession {
     None,
     /// Dragging a node (or multiple nodes).
@@ -28,6 +40,13 @@ pub enum DragSession {
     Connecting {
         from_port: SurfaceId,
         current_pos: Vec2, // World space
+    },
+    /// Dragging a knob to change a value.
+    KnobDragging {
+        id: SurfaceId,
+        parameter: String,
+        origin_y: f32,
+        base_value: f32,
     },
 }
 
@@ -57,13 +76,45 @@ impl InteractionKernel {
         camera: &InfiniteCamera,
         nodes: &[(SurfaceId, Rect)],
         ports: &[(SurfaceId, Circle)],
-    ) {
+        widgets: &[(SurfaceId, Rect)],
+    ) -> Vec<InteractionIntent> {
         match event {
             SurfaceEvent::PointerDown { position, button: MouseButton::Left, modifiers } => {
                 let world_pos = camera.screen_to_world(*position);
                 self.last_world_pos = world_pos;
+                
+                // 0. Widgets (Highest Priority)
+                if let Some(id) = HitTester::hit_test_nodes(widgets, world_pos) {
+                    let rect = widgets.iter().find(|(rid, _)| rid == &id).unwrap().1;
+                    let local_pos = world_pos - rect.min();
+                    
+                    // TODO: Improve widget type identification. 
+                    // For now, let's assume widgets with specific ID patterns are knobs.
+                    // We'll use a hacky check for demonstration.
+                    if id.0.0.to_string().contains("knob") {
+                         self.session = DragSession::KnobDragging {
+                             id,
+                             parameter: "unnamed".to_string(), // In real app, extract from ID
+                             origin_y: world_pos.y,
+                             base_value: 0.5, // Current value from signal
+                         };
+                         return vec![];
+                    }
 
-                // Hit testing prioritized by Ports -> Nodes -> Empty Canvas
+                    if id.0.0.to_string().contains("compile") {
+                         return vec![InteractionIntent::CompileCode {
+                             node_id: id, // In real app, extract actual node ID
+                             source: "// Edited Code...".to_string(),
+                         }];
+                    }
+
+                    let progress = (local_pos.x / rect.size.x).clamp(0.0, 1.0);
+
+                    return vec![InteractionIntent::SeekHistory { progress }];
+                }
+
+
+                // 1. Ports -> 2. Nodes -> 3. Empty Canvas
                 let hit_result = if let Some(port_id) = HitTester::hit_test_ports(ports, world_pos, 12.0) {
                     HitResult::Port(port_id)
                 } else if let Some(node_id) = HitTester::hit_test_nodes(nodes, world_pos) {
@@ -72,35 +123,36 @@ impl InteractionKernel {
                     HitResult::None
                 };
 
-                // TODO: Get Shift/Ctrl modifiers from SurfaceEvent if added
-                self.handle_down(world_pos, hit_result, modifiers.shift);
+                self.handle_down(world_pos, hit_result, modifiers.shift)
             }
             SurfaceEvent::PointerMove { position, .. } => {
                 let world_pos = camera.screen_to_world(*position);
-                self.handle_move(world_pos);
+                self.handle_move(world_pos)
             }
             SurfaceEvent::PointerUp { .. } => {
-                self.handle_up(nodes);
+                self.handle_up(nodes, ports)
             }
-            _ => {}
+            _ => vec![],
         }
     }
 
-    fn handle_down(&mut self, world_pos: Vec2, hit_result: HitResult, is_shift: bool) {
+    fn handle_down(&mut self, world_pos: Vec2, hit_result: HitResult, is_shift: bool) -> Vec<InteractionIntent> {
+        let mut intents = Vec::new();
         match hit_result {
             HitResult::Node(id) => {
                 if !is_shift {
                     if !self.selection.ids.contains(&id) {
                         self.selection.ids = vec![id];
+                        intents.push(InteractionIntent::Select { ids: self.selection.ids.clone() });
                     }
                 } else if let Some(pos) = self.selection.ids.iter().position(|&x| x == id) {
                     self.selection.ids.remove(pos);
+                    intents.push(InteractionIntent::Select { ids: self.selection.ids.clone() });
                 } else {
                     self.selection.ids.push(id);
+                    intents.push(InteractionIntent::Select { ids: self.selection.ids.clone() });
                 }
                 
-                // Grab offset would ideally use the node's current center.
-                // For now, we store ZERO and the caller can calculate it.
                 self.session = DragSession::MovingNode { id, grab_offset: Vec2::ZERO };
             }
             HitResult::Port(id) => {
@@ -109,18 +161,23 @@ impl InteractionKernel {
             HitResult::None => {
                 if !is_shift {
                     self.selection.ids.clear();
+                    intents.push(InteractionIntent::Select { ids: vec![] });
                 }
                 self.session = DragSession::BoxSelecting { origin: world_pos, current: world_pos };
             }
             _ => {}
         }
+        intents
     }
 
-    fn handle_move(&mut self, world_pos: Vec2) {
+    fn handle_move(&mut self, world_pos: Vec2) -> Vec<InteractionIntent> {
+        let mut intents = Vec::new();
+        let delta = world_pos - self.last_world_pos;
         self.last_world_pos = world_pos;
+
         match &mut self.session {
-            DragSession::MovingNode { .. } => {
-                // Dragging logic is reported via the session state.
+            DragSession::MovingNode { id, .. } => {
+                intents.push(InteractionIntent::MoveNode { id: *id, delta });
             }
             DragSession::BoxSelecting { current, .. } => {
                 *current = world_pos;
@@ -128,19 +185,44 @@ impl InteractionKernel {
             DragSession::Connecting { current_pos, .. } => {
                 *current_pos = world_pos;
             }
+            DragSession::KnobDragging { id, parameter, origin_y, base_value } => {
+
+                let delta_y = *origin_y - world_pos.y;
+                let value = (*base_value + delta_y * 0.005).clamp(0.0, 1.0);
+                intents.push(InteractionIntent::UpdateParameter {
+                    node_id: *id, // Hack: using knob id as node id for now
+                    parameter: parameter.clone(),
+                    value,
+                });
+            }
             _ => {}
         }
+
+        intents
     }
 
-    fn handle_up(&mut self, nodes: &[(SurfaceId, Rect)]) {
-        if let DragSession::BoxSelecting { origin, current } = self.session {
-            let selection_rect = Rect::from_points(origin, current);
-            for (id, rect) in nodes {
-                if selection_rect.intersects(*rect) && !self.selection.ids.contains(id) {
-                    self.selection.ids.push(*id);
+    fn handle_up(&mut self, nodes: &[(SurfaceId, Rect)], ports: &[(SurfaceId, Circle)]) -> Vec<InteractionIntent> {
+        let mut intents = Vec::new();
+        match &self.session {
+            DragSession::BoxSelecting { origin, current } => {
+                let selection_rect = Rect::from_points(*origin, *current);
+                for (id, rect) in nodes {
+                    if selection_rect.intersects(*rect) && !self.selection.ids.contains(id) {
+                        self.selection.ids.push(*id);
+                    }
+                }
+                intents.push(InteractionIntent::Select { ids: self.selection.ids.clone() });
+            }
+            DragSession::Connecting { from_port, current_pos } => {
+                if let Some(to_port) = HitTester::hit_test_ports(ports, *current_pos, 16.0) {
+                    if *from_port != to_port {
+                        intents.push(InteractionIntent::Connect { from: *from_port, to: to_port });
+                    }
                 }
             }
+            _ => {}
         }
         self.session = DragSession::None;
+        intents
     }
 }

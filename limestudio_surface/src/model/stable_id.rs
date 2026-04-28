@@ -17,7 +17,10 @@ impl SurfaceId {
     }
 
     pub fn from_seed(seed: &str) -> Self {
-        Self(dirtydata_core::types::StableId::from_seed(seed))
+        // Deterministic ID from seed using BLAKE3 hash
+        let h = blake3::hash(seed.as_bytes());
+        let bytes = &h.as_bytes()[0..16];
+        Self(dirtydata_core::types::StableId(ulid::Ulid::from_bytes(bytes.try_into().unwrap())))
     }
 }
 

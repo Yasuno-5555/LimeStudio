@@ -1,7 +1,7 @@
 //! Visual UI Designer for Squeezer.
 //! Allows dragging widgets and connecting them to VPL parameters.
 
-use limestudio_surface::ui_ir::{SurfaceWidget, FrameStyle};
+use limestudio_surface::ui_ir::{SurfaceWidget, FrameStyle, DisplaySignal};
 use limestudio_surface::model::stable_id::SurfaceId as Id;
 
 pub struct Designer {
@@ -148,7 +148,7 @@ impl DesignerWidget {
             WidgetKind::Knob => SurfaceWidget::Knob {
                 id: self.id,
                 label: self.label.clone(),
-                signal: dirtydata_core::types::DisplaySignal::Linear(0.0),
+                signal: DisplaySignal::Linear(0.0),
             },
             WidgetKind::Button => SurfaceWidget::Button {
                 id: self.id,

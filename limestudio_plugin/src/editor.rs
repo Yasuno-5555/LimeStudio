@@ -219,7 +219,7 @@ where
                     
                     if let Ok(output) = surface.get_current_texture() {
                         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                        renderer.render_scene(&shared_wgpu.device, &shared_wgpu.queue, &view, 0.0, &instances, &[]);
+                        renderer.render_scene(&shared_wgpu.device, &shared_wgpu.queue, &view, 0.0, engine.camera.view_projection(), &instances, &[]);
                         output.present();
                     }
                 }

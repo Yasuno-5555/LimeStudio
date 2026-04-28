@@ -2,11 +2,30 @@ use clap::{Parser, Subcommand};
 use limestudio_core::preset::PresetArtifact;
 use std::path::PathBuf;
 mod color;
+mod monitor;
 use color::Colorize;
+
 use std::process::Command;
 use limestudio_core::builder::BuildOrchestrator;
 
+#[derive(Subcommand)]
+pub enum NodeCommands {
+    /// 新しいDSPノードを作成する
+    New { name: String },
+    /// 利用可能なノードを一覧表示する
+    List,
+}
+
+#[derive(Subcommand)]
+pub enum GraphCommands {
+    /// 現在のグラフ構造を可視化する
+    Inspect { file: PathBuf },
+    /// リアルタイムのシグナル統計を監視する
+    Monitor,
+}
+
 #[derive(Parser)]
+
 #[command(author, version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
@@ -42,9 +61,21 @@ enum Commands {
     Doctor,
     /// プラグインを製品版としてビルド・署名する
     Release,
+    /// 新しいDSPノードの雛形を作成する
+    Node {
+        #[command(subcommand)]
+        sub: NodeCommands,
+    },
+    /// 現在のグラフ状態を表示・操作する
+    Graph {
+        #[command(subcommand)]
+        sub: GraphCommands,
+    },
     
     // 以下、要件見直しにより一時停止中のコマンド
+
     Validate { file: PathBuf, #[arg(short, long)] hostile: bool },
+
     Diff { old: PathBuf, new: PathBuf },
     Render { file: PathBuf, output: PathBuf, #[arg(short, long, default_value_t = 1.0)] duration: f32 },
     Bench { file: PathBuf, #[arg(short, long, default_value_t = 64)] block_size: usize },
@@ -188,6 +219,82 @@ fn main() -> anyhow::Result<()> {
                 std::process::exit(1);
             }
         }
+        Commands::Node { sub } => match sub {
+            NodeCommands::New { name } => {
+                let mut path = PathBuf::from("DirtyData/crates/dirtydata-runtime/src/nodes");
+                let file_name = format!("{}.rs", name.to_lowercase());
+                path.push(&file_name);
+                
+                if path.exists() {
+                    println!("Error: Node {} already exists at {}", name, path.display());
+                    return Ok(());
+                }
+
+                let template = format!(
+r#"use super::base::*;
+use dirtydata_core::types::ConfigSnapshot;
+
+#[derive(Clone)]
+pub struct {name}Node {{
+    // Add parameters here
+}}
+
+impl {name}Node {{
+    pub fn new() -> Self {{
+        Self {{ }}
+    }}
+}}
+
+impl DspNode for {name}Node {{
+    fn process(&mut self, inputs: &[f32], outputs: &mut [[f32; 2]], _config: &ConfigSnapshot, _ctx: &ProcessContext) {{
+        // Logic for {name}
+        for out in outputs.iter_mut() {{
+            *out = [0.0, 0.0];
+        }}
+    }}
+}}
+"#);
+                std::fs::write(&path, template)?;
+                println!("Scaffolded new node: {} -> {}", name.cyan(), path.display().to_string().dimmed());
+
+                // Register in mod.rs (Simple append for demonstration)
+                let mut mod_path = PathBuf::from("DirtyData/crates/dirtydata-runtime/src/nodes/mod.rs");
+                let mut mod_content = std::fs::read_to_string(&mod_path)?;
+                let mod_decl = format!("\npub mod {};\npub use {}::*;\n", name.to_lowercase(), name.to_lowercase());
+                if !mod_content.contains(&format!("pub mod {}", name.to_lowercase())) {
+                    mod_content.push_str(&mod_decl);
+                    std::fs::write(&mod_path, mod_content)?;
+                    println!("Registered in nodes/mod.rs");
+                }
+
+                println!("Next: Add instantiation logic in DirtyData/crates/dirtydata-runtime/src/lib.rs (DspRunner::new)");
+            }
+
+            NodeCommands::List => {
+                println!("Available Built-in Nodes:");
+                // Simple glob/list dir for now
+                let entries = std::fs::read_dir("DirtyData/crates/dirtydata-runtime/src/nodes")?;
+                for entry in entries {
+                    let entry = entry?;
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.ends_with(".rs") && name != "mod.rs" && name != "base.rs" {
+                        println!("  - {}", name.replace(".rs", "").cyan());
+                    }
+                }
+            }
+        },
+        Commands::Graph { sub } => match sub {
+            GraphCommands::Inspect { file } => {
+                println!("Inspecting Graph: {}", file.display().to_string().cyan());
+                // In a real app, parse the .lime file and print nodes/edges
+            }
+            GraphCommands::Monitor => {
+                println!("Connecting to Lime Audio Engine Monitor...");
+                monitor::run_monitor()?;
+            }
+
+        }
+
         _ => {
             println!("This command is temporarily disabled due to core refactoring.");
         }

@@ -28,3 +28,8 @@ pollster = { workspace = true }
 rtrb = "0.3"
 anyhow.workspace = true
 ulid.workspace = true
+blake3 = "1.5"
+dirtydata-dsp-fft = { path = "../DirtyData/crates/dirtydata-dsp-fft" }
+rustfft = "6.1"
+
+

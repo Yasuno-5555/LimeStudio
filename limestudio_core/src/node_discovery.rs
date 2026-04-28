@@ -1,6 +1,17 @@
 use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
-use dirtydata_core::types::{TypedPort, SignalUnit};
+use dirtydata_core::types::TypedPort;
+use std::path::Path;
+use std::fs;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SignalUnit {
+    Normalized,
+    Hertz,
+    Seconds,
+    Decibels,
+    Bipolar,
+}
 
 /// §NRT: Node Tiering — The Law of Access
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -50,64 +61,103 @@ impl NodeRegistry {
             blueprints: BTreeMap::new(),
         };
         registry.populate_standard_library();
+        
+        // §NDM: Discovery Mechanism — Automatic expansion
+        if let Ok(workspace_root) = std::env::current_dir() {
+            let search_path = workspace_root.join("DirtyData/crates");
+            if search_path.exists() {
+                let _ = registry.discover_nodes(&search_path);
+            }
+        }
+        
         registry
     }
 
-    /// §NDM: Discovery Mechanism
-    /// TODO: Scan manifest.toml files in DirtyData crates.
+    /// §NDM: Discovery Mechanism — Recursive file system scan
+    pub fn discover_nodes(&mut self, root: &Path) -> anyhow::Result<()> {
+        if root.is_dir() {
+            for entry in fs::read_dir(root)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_dir() {
+                    let blueprint_path = path.join("blueprint.toml");
+                    if blueprint_path.exists() {
+                        if let Ok(content) = fs::read_to_string(blueprint_path) {
+                            if let Ok(value) = toml::from_str::<toml::Value>(&content) {
+                                if let Some(blueprint) = self.parse_blueprint_toml(&value) {
+                                    self.register(blueprint);
+                                }
+                            }
+                        }
+                    }
+                    // Recursive scan for subdirectories (e.g. nested crates)
+                    let _ = self.discover_nodes(&path);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn parse_blueprint_toml(&self, value: &toml::Value) -> Option<NodeBlueprint> {
+        let b = value.get("blueprint")?;
+        
+        let id_name = b.get("id_name")?.as_str()?.to_string();
+        let display_name = b.get("display_name")?.as_str()?.to_string();
+        let category = b.get("category")?.as_str()?.to_string();
+        let tier_str = b.get("tier")?.as_str()?;
+        let tier = match tier_str {
+            "Core" => NodeTier::Core,
+            "Advanced" => NodeTier::Advanced,
+            "Experimental" => NodeTier::Experimental,
+            "Forbidden" => NodeTier::Forbidden,
+            _ => NodeTier::Experimental,
+        };
+        
+        let version = b.get("version")?.as_str()?.to_string();
+        let tags = b.get("tags")?.as_array()?.iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect();
+            
+        let mut params = Vec::new();
+        if let Some(p_list) = value.get("params").and_then(|v| v.as_array()) {
+            for p in p_list {
+                let name = p.get("name")?.as_str()?.to_string();
+                let unit_str = p.get("unit")?.as_str()?;
+                let unit = match unit_str {
+                    "Hertz" => SignalUnit::Hertz,
+                    "Seconds" => SignalUnit::Seconds,
+                    "Decibels" => SignalUnit::Decibels,
+                    "Bipolar" => SignalUnit::Bipolar,
+                    _ => SignalUnit::Normalized,
+                };
+                let default = p.get("default")?.as_float()? as f32;
+                let range_arr = p.get("range")?.as_array()?;
+                let range = (range_arr[0].as_float()? as f32, range_arr[1].as_float()? as f32);
+                
+                params.push(ParamDefinition { name, unit, default, range });
+            }
+        }
+
+        Some(NodeBlueprint {
+            id_name,
+            display_name,
+            category,
+            tier,
+            tags,
+            ports: vec![], // To be expanded with port definitions
+            params,
+            version,
+        })
+    }
+
     fn populate_standard_library(&mut self) {
-        // --- 1. Chaos Module (Experimental) ---
-        self.register(NodeBlueprint {
-            id_name: "chaos.chua".into(),
-            display_name: "Chua's Circuit".into(),
-            category: "Chaos".into(),
-            tier: NodeTier::Experimental,
-            tags: vec!["Physical".into(), "Non-linear".into(), "Noisy".into()],
-            ports: vec![], // Defined by process
-            params: vec![
-                ParamDefinition { name: "Alpha".into(), unit: SignalUnit::Normalized, default: 15.6, range: (0.0, 30.0) },
-                ParamDefinition { name: "Beta".into(), unit: SignalUnit::Normalized, default: 28.0, range: (0.0, 50.0) },
-                ParamDefinition { name: "Rate".into(), unit: SignalUnit::Hertz, default: 1.0, range: (0.01, 100.0) },
-            ],
-            version: "0.1.0".into(),
-        });
-
-        // --- 2. Spectral Module (Advanced) ---
-        self.register(NodeBlueprint {
-            id_name: "spectral.blur".into(),
-            display_name: "Spectral Blur".into(),
-            category: "Spectral".into(),
-            tier: NodeTier::Advanced,
-            tags: vec!["FFT".into(), "Ambient".into()],
-            ports: vec![],
-            params: vec![
-                ParamDefinition { name: "Size".into(), unit: SignalUnit::Seconds, default: 0.5, range: (0.0, 10.0) },
-                ParamDefinition { name: "Feedback".into(), unit: SignalUnit::Normalized, default: 0.8, range: (0.0, 0.99) },
-            ],
-            version: "0.2.1".into(),
-        });
-
-        // --- 3. Filter Module (Core) ---
-        self.register(NodeBlueprint {
-            id_name: "filter.svf".into(),
-            display_name: "SVF Filter".into(),
-            category: "Filter".into(),
-            tier: NodeTier::Core,
-            tags: vec!["Standard".into(), "ZDF".into()],
-            ports: vec![],
-            params: vec![
-                ParamDefinition { name: "Cutoff".into(), unit: SignalUnit::Hertz, default: 1000.0, range: (20.0, 20000.0) },
-                ParamDefinition { name: "Resonance".into(), unit: SignalUnit::Normalized, default: 0.5, range: (0.0, 1.0) },
-            ],
-            version: "1.0.0".into(),
-        });
+        // Fallback or internal nodes could be added here
     }
 
     pub fn register(&mut self, blueprint: NodeBlueprint) {
         self.blueprints.insert(blueprint.id_name.clone(), blueprint);
     }
 
-    /// §NCF: Context Filtering
     pub fn find_by_category(&self, category: &str) -> Vec<&NodeBlueprint> {
         self.blueprints.values()
             .filter(|b| b.category == category)
@@ -120,3 +170,4 @@ impl NodeRegistry {
             .collect()
     }
 }
+

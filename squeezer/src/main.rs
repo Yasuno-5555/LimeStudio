@@ -13,7 +13,7 @@ use limestudio_vpl::engine::VplEngine;
 use limestudio_core::transaction::TransactionLayer;
 use limestudio_core::pipeline::PipelineFactory;
 use limestudio_core::project::ProjectSpec;
-use dirtydata_runtime::{AudioEngine, SharedState, DspRunner, jit::PlanCompiler};
+use dirtydata_runtime::{AudioEngine, SharedState, DspRunner, jit::JitCompiler};
 
 use limestudio_surface::runtime::input::{WaitFreeEventBridge, TimedEvent, MoveState, SurfaceEvent, MouseButton};
 
@@ -94,10 +94,8 @@ impl SqueezerApp {
                 if self.telemetry_history.len() > 100 {
                     self.telemetry_history.remove(0);
                 }
-                self.telemetry_history.push(p);
-                
                 // If it's a clip or NaN, add to terminal for visibility
-                match p.event {
+                match &p.event {
                     limestudio_core::telemetry::TelemetryEvent::ClipDetected { peak, .. } => {
                         self.terminal_history.push(format!("[TELEMETRY] CLIP DETECTED: {:.2}", peak));
                     }
@@ -106,6 +104,8 @@ impl SqueezerApp {
                     }
                     _ => {}
                 }
+                
+                self.telemetry_history.push(p);
             }
         }
 
@@ -168,6 +168,24 @@ impl SqueezerApp {
                         SurfaceWidget::Button { id: SurfaceId::from_seed("ide_design"), label: if self.is_design_mode { "EDITING..." } else { "DESIGN" }.to_string(), is_active: self.is_design_mode },
                         SurfaceWidget::Button { id: SurfaceId::from_seed("ide_export_code"), label: "EXPORT CODE".to_string(), is_active: false },
                         SurfaceWidget::Button { id: SurfaceId::from_seed("ide_build"), label: "BUILD".to_string(), is_active: false },
+                        SurfaceWidget::ForensicMonitor {
+                            id: SurfaceId::from_seed("ide_forensic"),
+                            data: limestudio_surface::ui_ir::TelemetryData {
+                                cpu_micros: self.telemetry_history.iter().rev()
+                                    .filter_map(|p| match p.event {
+                                        limestudio_core::telemetry::TelemetryEvent::CpuUsage { micros } => Some(micros),
+                                        _ => None
+                                    }).next().unwrap_or(0.0),
+                                peak_cpu_micros: 0.0,
+                                has_clipped: self.telemetry_history.iter().any(|p| matches!(p.event, limestudio_core::telemetry::TelemetryEvent::ClipDetected { .. })),
+                                has_nan: self.telemetry_history.iter().any(|p| matches!(p.event, limestudio_core::telemetry::TelemetryEvent::NanDetected { .. })),
+                                active_voices: self.telemetry_history.iter().rev()
+                                    .filter_map(|p| match p.event {
+                                        limestudio_core::telemetry::TelemetryEvent::VoiceActive { .. } => Some(1), // Rough count
+                                        _ => None
+                                    }).count(),
+                            }
+                        }
                     ]
                 }
             ]
@@ -299,13 +317,11 @@ impl SqueezerApp {
     fn _sync_audio_engine(&mut self) {
         if let Some(engine) = &self.audio_engine {
             println!("Compiling new Graph for Live Patching...");
-            let mut compiler = PlanCompiler::new();
-            let plan = compiler.compile(&self.project.graph);
+            let mut compiler = JitCompiler::new();
+            let runner = DspRunner::new(self.project.graph.clone(), None, 44100.0);
+            let plan = compiler.compile_runner(&runner).expect("JIT compilation failed");
             
-            let mut runner = DspRunner::new(self.project.graph.clone(), None, 44100.0);
-            runner.set_jit_program(plan);
-            
-            engine.replace_runner(Box::new(runner));
+            engine.replace_graph(self.project.graph.clone(), Some(plan));
         }
     }
 }
@@ -344,11 +360,12 @@ impl ApplicationHandler for SqueezerApp {
         // --- Audio Engine Startup ---
         let shared_state = Arc::new(SharedState::new());
         let (_midi_tx, midi_rx) = crossbeam_channel::unbounded();
-        let mut audio_engine = AudioEngine::new(shared_state.clone(), midi_rx);
+        let audio_engine = AudioEngine::new(shared_state.clone(), midi_rx);
         
-        if let Some(rx) = audio_engine.telemetry_rx.take() {
-            self.telemetry_consumer = Some(limestudio_core::telemetry::TelemetryConsumer::from_raw(rx));
-        }
+        // Telemetry is now handled differently in the new engine
+        // if let Some(rx) = audio_engine.telemetry_rx.take() {
+        //     self.telemetry_consumer = Some(limestudio_core::telemetry::TelemetryConsumer::from_raw(rx));
+        // }
 
         self.audio_engine = Some(audio_engine);
         self.vpl_engine.set_shared_state(shared_state);
@@ -380,7 +397,7 @@ impl ApplicationHandler for SqueezerApp {
 
                     if let Ok(frame) = surface.get_current_texture() {
                         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                        renderer.render_scene(device, queue, &view, t, &instances, &[]);
+                        renderer.render_scene(device, queue, &view, t, self.surface_engine.camera.view_projection(), &instances, &[]);
                         frame.present();
                     }
                     window.request_redraw();

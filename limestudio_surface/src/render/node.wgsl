@@ -15,6 +15,13 @@ struct VertexOutput {
     @location(3) corner_radius: f32,
 };
 
+struct CameraUniform {
+    view_proj: mat4x4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> camera: CameraUniform;
+
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var positions = array<vec2<f32>, 4>(
@@ -27,17 +34,15 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     let uv = positions[input.vertex_index];
     let world_pos = input.pos + (uv * input.size * 0.5);
     
-    // TODO: Apply Camera ViewProjection here. 
-    // For now, assume world_pos is already in NDC for testing.
-    
     var out: VertexOutput;
-    out.clip_position = vec4<f32>(world_pos, 0.0, 1.0);
+    out.clip_position = camera.view_proj * vec4<f32>(world_pos, 0.0, 1.0);
     out.uv = uv * input.size * 0.5;
     out.color = input.color;
     out.size = input.size;
     out.corner_radius = input.corner_radius;
     return out;
 }
+
 
 fn sdf_rounded_box(p: vec2<f32>, b: vec2<f32>, r: f32) -> f32 {
     let q = abs(p) - b + r;

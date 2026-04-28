@@ -1,7 +1,8 @@
 use glam::Vec2;
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, FrameStyle, TemporalStrategy, SurfaceId};
-use dirtydata_core::provenance::CodeFragment;
+use crate::ui_ir::{SurfaceWidget, SurfaceId, DisplaySignal, TreeNode, FrameStyle};
+use dirtydata_dsp_fft::{FftProcessor, WindowType};
+
 
 /// §SSS: Authority Drawer — The Accountable Truth.
 /// "Persistent panel = accountable truth. 逃がすな。"
@@ -16,7 +17,9 @@ pub struct AuthorityDrawer {
 }
 
 impl AuthorityDrawer {
+
     pub fn new(id: SurfaceId, screen_size: Vec2) -> Self {
+
         let width = 400.0;
         Self {
             id,
@@ -28,59 +31,137 @@ impl AuthorityDrawer {
         }
     }
 
-    pub fn resize(&mut self, screen_size: Vec2) {
-        self.position = Vec2::new(screen_size.x - self.size.x, 0.0);
-        self.size.y = screen_size.y;
-    }
+    pub fn build_widget(
+        &self, 
+        node_id: SurfaceId, 
+        node_name: &str, 
+        node_state: Option<&dirtydata_runtime::nodes::base::NodeState>,
+        code_fragment: Option<&crate::authority::visible_compiler::CodeFragment>,
+    ) -> SurfaceWidget {
+        use crate::ui_ir::SurfaceWidget::*;
 
-    pub fn build_primitives(&self, fragment: Option<&CodeFragment>) -> Vec<SurfacePrimitive> {
-        let mut primitives = Vec::new();
-        
-        if !self.is_open {
-            return primitives;
-        }
+        let mut children = vec![
+            Label { text: format!("AUTHORITY: {}", node_name), is_secondary: false },
+            Label { text: format!("ID: {:?}", node_id), is_secondary: true },
+        ];
 
-        // 1. Background (Solid Matte)
-        primitives.push(SurfacePrimitive::Frame {
-            id: self.id,
-            rect: [self.position.x, self.position.y, self.size.x, self.size.y],
-            style: FrameStyle::Standard,
-            color: Color::AUTHORITY_BG.to_array(),
-            temporal: TemporalStrategy::Instant,
-        });
-
-        // 2. Border Line (Left Edge)
-        primitives.push(SurfacePrimitive::Frame {
-            id: self.id,
-            rect: [self.position.x, 0.0, 1.0, self.size.y],
-            style: FrameStyle::None,
-            color: Color::ACCENT_LIME.to_array(),
-            temporal: TemporalStrategy::Instant,
-        });
-
-        if let Some(_frag) = fragment {
-            // Header BG
-            primitives.push(SurfacePrimitive::Frame {
-                id: self.id,
-                rect: [self.position.x + 16.0, 16.0, self.size.x - 32.0, 40.0],
-                style: FrameStyle::Standard,
-                color: Color::BG_PANEL.to_array(),
-                temporal: TemporalStrategy::Instant,
+        // Code Section (Highest priority in Authority view)
+        children.push(Label { text: "SOURCE CODE".to_string(), is_secondary: false });
+        if let Some(frag) = code_fragment {
+            children.push(CodeView {
+                code: frag.source.clone(),
+                language: frag.language.clone(),
             });
+            children.push(Button {
+                id: SurfaceId::from_seed(&format!("compile:{}", node_id.0)),
+                label: "RECOMPILE (HOT RELOAD)".to_string(),
+                is_active: true,
+            });
+        } else {
 
-            // Highlight selected line
-            if let Some(line) = self.selected_line {
-                let line_y = 100.0 + (line as f32 - 1.0) * 24.0;
-                primitives.push(SurfacePrimitive::Frame {
-                    id: self.id,
-                    rect: [self.position.x, line_y, self.size.x, 24.0],
-                    style: FrameStyle::None,
-                    color: [Color::ACCENT_LIME.0.x, Color::ACCENT_LIME.0.y, Color::ACCENT_LIME.0.z, 0.15],
-                    temporal: TemporalStrategy::Fast(0.06),
-                });
+            children.push(Label { text: "// Source unavailable or in-flight...".to_string(), is_secondary: true });
+        }
+        
+        children.push(Row { children: vec![] }); // Spacer
+
+        // Analysis Section
+        children.push(Label { text: "SIGNAL ANALYSIS".to_string(), is_secondary: false });
+        
+        // Time Domain (Waveform)
+        let fft_size = 128;
+        let mock_data: Vec<f32> = (0..fft_size).map(|i| {
+            let s1 = (i as f32 * 0.2).sin() * 0.5;
+            let s2 = (i as f32 * 0.5).sin() * 0.3;
+            s1 + s2
+        }).collect();
+        
+        children.push(Waveform {
+            id: format!("wave:{}", node_id.0),
+            data: mock_data.clone(),
+        });
+
+        // Frequency Domain (Spectrum) using dirtydata-dsp-fft
+        let mut fft_proc = FftProcessor::new(fft_size, WindowType::Hann);
+        let mut spectrum_complex = vec![rustfft::num_complex::Complex::default(); fft_size];
+        fft_proc.forward(&mock_data, &mut spectrum_complex);
+        
+        // Only take the first half (Nyquist) and calculate magnitude
+        let spectrum_data: Vec<f32> = spectrum_complex.iter()
+            .take(fft_size / 2)
+            .map(|c: &rustfft::num_complex::Complex<f32>| (c.norm() / fft_size as f32) * 5.0) // Scale for visibility
+            .collect();
+
+
+        children.push(Spectrum {
+            id: format!("spec:{}", node_id.0),
+            data: spectrum_data,
+        });
+
+
+        if let Some(state) = node_state {
+
+
+            children.push(Label { text: "LIVE STATE".to_string(), is_secondary: false });
+            
+            match state {
+                dirtydata_runtime::nodes::base::NodeState::Serialized(val) => {
+                    if let Some(obj) = val.as_object() {
+                        for (key, v) in obj {
+                            let signal = if let Some(n) = v.as_f64() {
+                                DisplaySignal::Linear(n as f32)
+                            } else {
+                                DisplaySignal::Static(0.0)
+                            };
+
+                            children.push(Row {
+                                children: vec![
+                                    Label { text: format!("{}:", key), is_secondary: true },
+                                    Knob {
+                                        id: SurfaceId::from_seed(&format!("knob:{}:{}", node_id.0, key)),
+                                        label: "".to_string(),
+                                        signal,
+                                    }
+                                ]
+                            });
+
+                        }
+                    } else {
+                        children.push(Label { text: format!("{:?}", val), is_secondary: true });
+                    }
+                }
+                _ => {
+                    children.push(Label { text: "Empty State".to_string(), is_secondary: true });
+                }
             }
         }
 
-        primitives
+
+        // Provenance Section
+        children.push(Label { text: "PROVENANCE".to_string(), is_secondary: false });
+        children.push(TreeView {
+            id: SurfaceId::generate(),
+            nodes: vec![
+                TreeNode {
+                    id: SurfaceId::generate(),
+                    label: "Source: core_lib.rs".to_string(),
+                    children: vec![],
+                    is_expanded: false,
+                },
+                TreeNode {
+                    id: SurfaceId::generate(),
+                    label: "Verified by: Compiler Authority".to_string(),
+                    children: vec![],
+                    is_expanded: false,
+                }
+            ],
+        });
+
+        Box {
+            style: crate::ui_ir::FrameStyle::AuthorityGlass,
+            children: vec![
+                Column { children }
+            ],
+        }
     }
 }
+

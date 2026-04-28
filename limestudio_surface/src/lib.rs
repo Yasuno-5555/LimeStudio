@@ -12,8 +12,8 @@ pub mod host_attach;
 pub mod ui_ir;
 
 use crate::model::stable_id::SurfaceId;
-use crate::ui_ir::{SurfacePrimitive, TemporalStrategy, FrameStyle, ArcKind, IndicatorKind};
-use std::collections::HashMap;
+use crate::ui_ir::{SurfacePrimitive, TemporalStrategy, FrameStyle, ArcKind, IndicatorKind, DisplaySignal};
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use crate::color::Color;
@@ -37,7 +37,8 @@ pub struct LinkAnalysisState {
 /// The Core Surface Engine (V7 Semantic Architecture)
 pub struct SurfaceEngine {
     pub scene: scene::flat_scene::SurfaceScene,
-    pub input: runtime::input::InteractionState,
+    pub input: runtime::interaction_kernel::InteractionKernel,
+    pub camera: scene::camera::InfiniteCamera,
     pub profiler: profiler::FrameProfiler,
     
     // V3-V7 Architecture: Asynchronous Perception
@@ -56,7 +57,13 @@ pub struct SurfaceEngine {
 
     // Layout Engine (Taffy)
     pub taffy: Taffy,
+    
+    // Geometry Cache for Hit Testing
+    pub node_geometry: Vec<(SurfaceId, model::geometry::Rect)>,
+    pub port_geometry: Vec<(SurfaceId, model::geometry::Circle)>,
+    pub widget_geometry: Vec<(SurfaceId, model::geometry::Rect)>,
 }
+
 
 impl Default for SurfaceEngine {
     fn default() -> Self { Self::new() }
@@ -64,45 +71,122 @@ impl Default for SurfaceEngine {
 
 impl SurfaceEngine {
     pub fn new() -> Self {
+        let mut visible_compiler = authority::visible_compiler::VisibleCompilerRegistry::new();
+        let mock_id = SurfaceId::generate(); // We'd need a way to reference actual nodes
+        visible_compiler.provenance.insert(mock_id, authority::visible_compiler::CodeFragment {
+            source: "fn dsp_process(in: f32) -> f32 {\n    in * 0.5 // Accountable Logic\n}".to_string(),
+            language: "rust".to_string(),
+        });
+
         Self {
             scene: scene::flat_scene::SurfaceScene::new(),
-            input: runtime::input::InteractionState::new(3.0),
+            input: runtime::interaction_kernel::InteractionKernel::new(),
+            camera: scene::camera::InfiniteCamera::new(glam::Vec2::new(1280.0, 720.0)),
             profiler: profiler::FrameProfiler::new(),
             primitive_stream: Arc::new(Mutex::new(Vec::new())),
             transition_store: HashMap::new(),
-            selections: std::collections::HashSet::new(),
+            selections: HashSet::new(),
             causality_states: HashMap::new(),
             last_frame_time: Instant::now(),
-            visible_compiler: authority::visible_compiler::VisibleCompilerRegistry::new(),
-            authority_drawer: widgets::authority_drawer::AuthorityDrawer::new(SurfaceId(dirtydata_core::types::StableId(ulid::Ulid::nil())), glam::Vec2::new(1280.0, 720.0)),
+            visible_compiler,
+            
+            authority_drawer: widgets::authority_drawer::AuthorityDrawer::new(
+                SurfaceId::generate(), 
+                glam::Vec2::new(1280.0, 720.0)
+            ),
             time_travel: authority::time_travel::TimeTravelEngine::new(64),
             causal_replay: authority::causal_replay::CausalReplayEngine::new(3.0),
             trust_ledger: model::provenance::TrustLedger::new(),
+
             taffy: Taffy::new(),
+            node_geometry: Vec::new(),
+            port_geometry: Vec::new(),
+            widget_geometry: Vec::new(),
         }
     }
 
     /// Taffyを用いた本等なレイアウト解決。
     pub fn sync_ui(&mut self, tree: &crate::ui_ir::SurfaceWidget) {
         self.taffy.clear();
+        self.node_geometry.clear();
+        self.port_geometry.clear();
+        self.widget_geometry.clear();
         
+        let main_view = self.build_taffy_recursive(tree);
+        let mut root_children = vec![main_view];
+
+        // 2. Inject Authority Drawer if a node is selected
+        let mut drawer_widget = None;
+        if let Some(selected_id) = self.selections.iter().next() {
+            let snapshot = self.time_travel.get_current_state();
+            // Convert SurfaceId (wraps StableId) to StableId for lookup
+            let stable_id = dirtydata_core::types::StableId(selected_id.0.0);
+            let node_state = snapshot.and_then(|s| s.node_states.get(&stable_id));
+            let code_fragment = self.visible_compiler.get_fragment(*selected_id);
+            
+            let dw = self.authority_drawer.build_widget(*selected_id, "Selected Node", node_state, code_fragment);
+
+            let drawer_node = self.build_taffy_recursive(&dw);
+            root_children.push(drawer_node);
+            drawer_widget = Some(dw);
+        }
+
         let root_style = Style {
             size: Size { width: Dimension::Percent(1.0), height: Dimension::Percent(1.0) },
-            flex_direction: FlexDirection::Column,
+            flex_direction: FlexDirection::Row, // Side-by-side
             ..Default::default()
         };
-        
-        let root_node = self.build_taffy_recursive(tree);
-        let container = self.taffy.new_with_children(root_style, &[root_node]).unwrap();
+        let container = self.taffy.new_with_children(root_style, &root_children).unwrap();
 
         // 1280x720 を論理的な基準としてレイアウト計算
         self.taffy.compute_layout(container, Size { width: AvailableSpace::Definite(1280.0), height: AvailableSpace::Definite(720.0) }).unwrap();
 
         let mut primitives = Vec::new();
-        self.generate_primitives_from_layout(tree, root_node, &mut primitives, glam::Vec2::ZERO);
+        self.generate_primitives_from_layout(tree, main_view, &mut primitives, glam::Vec2::ZERO);
+        
+        if let Some(dw) = drawer_widget {
+            // We need to find the drawer_node again or store it
+            let node_children = self.taffy.children(container).unwrap();
+            if node_children.len() > 1 {
+                self.generate_primitives_from_layout(&dw, node_children[1], &mut primitives, glam::Vec2::ZERO);
+            }
+        }
+
 
         *self.primitive_stream.lock().unwrap() = primitives;
     }
+
+    pub fn handle_intents(&mut self, intents: Vec<crate::runtime::interaction_kernel::InteractionIntent>) {
+        for intent in intents {
+            match intent {
+                crate::runtime::interaction_kernel::InteractionIntent::Connect { from, to } => {
+                    println!("Surface: Intent -> Connect {:?} to {:?}", from, to);
+                }
+                crate::runtime::interaction_kernel::InteractionIntent::SeekHistory { progress } => {
+                    println!("Surface: Intent -> Seek History to {}%", progress * 100.0);
+                    self.time_travel.seek_normalized(progress);
+                }
+                crate::runtime::interaction_kernel::InteractionIntent::Select { ids } => {
+                    self.selections = ids.into_iter().collect();
+                }
+                crate::runtime::interaction_kernel::InteractionIntent::MoveNode { id, delta } => {
+                    println!("Surface: Intent -> Move Node {:?} by {:?}", id, delta);
+                }
+                crate::runtime::interaction_kernel::InteractionIntent::UpdateParameter { node_id: _, parameter, value } => {
+                    println!("Surface: Intent -> Update Parameter '{}' to {:.3}", parameter, value);
+                    // TODO: Update in Scene/Authority
+                }
+                crate::runtime::interaction_kernel::InteractionIntent::CompileCode { node_id: _, source } => {
+                    println!("Surface: Intent -> Recompiling Node with new source...");
+                    // In real app, this triggers JIT.
+                    // For now, we update the mock provenance to show it "worked".
+                    // (We'd need to map the 'compile:id' back to the node ID)
+                }
+            }
+        }
+    }
+
+
 
     fn build_taffy_recursive(&mut self, widget: &crate::ui_ir::SurfaceWidget) -> Node {
         use crate::ui_ir::SurfaceWidget::*;
@@ -166,12 +250,55 @@ impl SurfaceEngine {
             Custom { style, .. } => {
                 self.taffy.new_leaf(*style.clone()).unwrap()
             }
+            Label { .. } => {
+                self.taffy.new_leaf(Style {
+                    size: Size { width: Dimension::Auto, height: Dimension::Points(24.0) },
+                    margin: Rect { left: LengthPercentageAuto::Points(8.0), right: LengthPercentageAuto::Points(8.0), top: LengthPercentageAuto::Points(4.0), bottom: LengthPercentageAuto::Points(4.0) },
+                    ..Default::default()
+                }).unwrap()
+            }
+            PrimitiveStream { .. } => {
+                self.taffy.new_leaf(Style {
+                    size: Size { width: Dimension::Percent(1.0), height: Dimension::Auto },
+                    ..Default::default()
+                }).unwrap()
+            }
+            Timeline { .. } => {
+                self.taffy.new_leaf(Style {
+                    size: Size { width: Dimension::Percent(1.0), height: Dimension::Points(40.0) },
+                    margin: Rect::points(8.0),
+                    ..Default::default()
+                }).unwrap()
+            }
+            CodeView { .. } => {
+                self.taffy.new_leaf(Style {
+                    size: Size { width: Dimension::Percent(1.0), height: Dimension::Points(300.0) },
+                    margin: Rect::points(4.0),
+                    ..Default::default()
+                }).unwrap()
+            }
+            Waveform { .. } => {
+                self.taffy.new_leaf(Style {
+                    size: Size { width: Dimension::Percent(1.0), height: Dimension::Points(100.0) },
+                    margin: Rect::points(8.0),
+                    ..Default::default()
+                }).unwrap()
+            }
+            Spectrum { .. } => {
+                self.taffy.new_leaf(Style {
+                    size: Size { width: Dimension::Percent(1.0), height: Dimension::Points(120.0) },
+                    margin: Rect::points(8.0),
+                    ..Default::default()
+                }).unwrap()
+            }
+
             _ => self.taffy.new_leaf(Style::default()).unwrap(),
         }
     }
 
+
     fn generate_primitives_from_layout(
-        &self,
+        &mut self,
         widget: &crate::ui_ir::SurfaceWidget,
         node: Node,
         primitives: &mut Vec<SurfacePrimitive>,
@@ -182,9 +309,15 @@ impl SurfaceEngine {
         let pos = parent_pos + glam::vec2(layout.location.x, layout.location.y);
         let rounded_pos = (pos / 8.0).round() * 8.0;
         let size = glam::vec2(layout.size.width, layout.size.height);
+        let rect = crate::model::geometry::Rect::new(rounded_pos, size);
 
         use crate::ui_ir::SurfaceWidget::*;
+        
+        // Populate Widget Geometry for generic interaction
+        self.widget_geometry.push((*widget.id().unwrap_or(&SurfaceId::generate()), rect));
+
         match widget {
+
             Column { children } => {
                 let node_children = self.taffy.children(node).unwrap();
                 for (i, child) in children.iter().enumerate() {
@@ -201,9 +334,9 @@ impl SurfaceEngine {
                     }
                 }
             }
-            Knob { id, label: _, signal } => {
+            Knob { id, label, signal } => {
                 let value = match signal {
-                    dirtydata_core::types::DisplaySignal::Linear(v) => *v,
+                    DisplaySignal::Linear(v) => *v,
                     _ => 0.0,
                 };
                 primitives.push(SurfacePrimitive::Frame {
@@ -223,10 +356,17 @@ impl SurfaceEngine {
                     kind: ArcKind::Value,
                     temporal: TemporalStrategy::Standard(0.06),
                 });
+                primitives.push(SurfacePrimitive::Text {
+                    id: *id,
+                    rect: [rounded_pos.x, rounded_pos.y + size.y + 4.0, size.x, 20.0],
+                    text: label.clone(),
+                    font_size: 12.0,
+                    color: [0.8, 0.8, 0.8, 1.0],
+                });
             }
-            Slider { id, label: _, signal, is_vertical: _ } => {
+            Slider { id, label, signal, is_vertical: _ } => {
                 let value = match signal {
-                    dirtydata_core::types::DisplaySignal::Linear(v) => *v,
+                    DisplaySignal::Linear(v) => *v,
                     _ => 0.0,
                 };
                 primitives.push(SurfacePrimitive::Indicator {
@@ -237,10 +377,17 @@ impl SurfaceEngine {
                     color: Color::ACCENT_LIME.to_array(),
                     temporal: TemporalStrategy::Standard(0.06),
                 });
+                primitives.push(SurfacePrimitive::Text {
+                    id: *id,
+                    rect: [rounded_pos.x, rounded_pos.y + size.y + 4.0, size.x, 20.0],
+                    text: label.clone(),
+                    font_size: 12.0,
+                    color: [0.8, 0.8, 0.8, 1.0],
+                });
             }
             LevelMeter { id, signal } => {
                 let (left, right) = match signal {
-                    dirtydata_core::types::DisplaySignal::Meter { value, peak } => (*value, *peak),
+                    DisplaySignal::Meter { value, peak } => (*value, *peak),
                     _ => (0.0, 0.0),
                 };
                 let id_stable = SurfaceId::from_seed(id);
@@ -261,13 +408,13 @@ impl SurfaceEngine {
                     temporal: TemporalStrategy::Fluid(0.15),
                 });
             }
-            XYPad { id, label: _, x_signal, y_signal } => {
+            XYPad { id, label, x_signal, y_signal } => {
                 let x = match x_signal {
-                    dirtydata_core::types::DisplaySignal::Linear(v) => *v,
+                    DisplaySignal::Linear(v) => *v,
                     _ => 0.0,
                 };
                 let y = match y_signal {
-                    dirtydata_core::types::DisplaySignal::Linear(v) => *v,
+                    DisplaySignal::Linear(v) => *v,
                     _ => 0.0,
                 };
                 primitives.push(SurfacePrimitive::Frame {
@@ -286,17 +433,32 @@ impl SurfaceEngine {
                     color: Color::ACCENT_LIME.to_array(),
                     temporal: TemporalStrategy::Standard(0.02),
                 });
+                primitives.push(SurfacePrimitive::Text {
+                    id: *id,
+                    rect: [rounded_pos.x, rounded_pos.y + size.y + 4.0, size.x, 20.0],
+                    text: label.clone(),
+                    font_size: 12.0,
+                    color: [0.8, 0.8, 0.8, 1.0],
+                });
             }
-            Box { children: _, style } => {
+            Box { children, style } => {
                 primitives.push(SurfacePrimitive::Frame {
                     id: SurfaceId::generate(),
                     rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
                     style: *style,
-                    color: [0.2, 0.2, 0.2, 0.8],
-                    temporal: TemporalStrategy::Standard(0.06),
+                    color: if *style == FrameStyle::AuthorityGlass { [0.05, 0.05, 0.05, 0.9] } else { [0.2, 0.2, 0.2, 0.8] },
+                    temporal: TemporalStrategy::Instant,
                 });
+
+                let node_children = self.taffy.children(node).unwrap();
+                for (i, child) in children.iter().enumerate() {
+                    if i < node_children.len() {
+                        self.generate_primitives_from_layout(child, node_children[i], primitives, pos);
+                    }
+                }
             }
-            Button { id, label: _, is_active } => {
+
+            Button { id, label, is_active } => {
                 primitives.push(SurfacePrimitive::Frame {
                     id: *id,
                     rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
@@ -304,7 +466,22 @@ impl SurfaceEngine {
                     color: if *is_active { [0.4, 0.4, 0.4, 1.0] } else { [0.3, 0.3, 0.3, 1.0] },
                     temporal: TemporalStrategy::Standard(0.04),
                 });
-                // TODO: Render text label
+                primitives.push(SurfacePrimitive::Text {
+                    id: *id,
+                    rect: [rounded_pos.x + 8.0, rounded_pos.y + 4.0, size.x - 16.0, size.y - 8.0],
+                    text: label.clone(),
+                    font_size: 14.0,
+                    color: [0.9, 0.9, 0.9, 1.0],
+                });
+            }
+            Label { text, is_secondary } => {
+                primitives.push(SurfacePrimitive::Text {
+                    id: SurfaceId::generate(),
+                    rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
+                    text: text.clone(),
+                    font_size: if *is_secondary { 12.0 } else { 16.0 },
+                    color: if *is_secondary { [0.6, 0.6, 0.6, 1.0] } else { [0.9, 0.9, 0.9, 1.0] },
+                });
             }
             Custom { primitives: custom_primitives, .. } => {
                 for cp in custom_primitives {
@@ -313,13 +490,196 @@ impl SurfaceEngine {
                     primitives.push(cp_cloned);
                 }
             }
+            CodeView { code, .. } => {
+                primitives.push(SurfacePrimitive::Frame {
+                    id: SurfaceId::generate(),
+                    rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
+                    style: FrameStyle::Standard,
+                    color: [0.05, 0.05, 0.05, 1.0],
+                    temporal: TemporalStrategy::Instant,
+                });
+                primitives.push(SurfacePrimitive::Text {
+                    id: SurfaceId::generate(),
+                    rect: [rounded_pos.x + 8.0, rounded_pos.y + 8.0, size.x - 16.0, size.y - 16.0],
+                    text: code.clone(),
+                    font_size: 13.0,
+                    color: [0.7, 0.9, 0.7, 1.0], // Hack: greenish code
+                });
+            }
+            Waveform { id, data } => {
+                let id_stable = SurfaceId::from_seed(id);
+                // 1. Background
+                primitives.push(SurfacePrimitive::Frame {
+                    id: id_stable,
+                    rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
+                    style: FrameStyle::Standard,
+                    color: [0.02, 0.02, 0.02, 1.0],
+                    temporal: TemporalStrategy::Instant,
+                });
+                
+                // 2. Data Segments
+                if data.len() > 1 {
+                    let step = size.x / (data.len() - 1) as f32;
+                    let centerY = rounded_pos.y + size.y * 0.5;
+                    let scaleY = size.y * 0.4;
+                    
+                    for i in 0..(data.len() - 1) {
+                        primitives.push(SurfacePrimitive::Curve {
+                            id: id_stable,
+                            control_points: vec![
+                                [rounded_pos.x + i as f32 * step, centerY - data[i] * scaleY],
+                                [rounded_pos.x + (i + 1) as f32 * step, centerY - data[i+1] * scaleY],
+                            ],
+                            kind: crate::ui_ir::CurveKind::Cable, // Hack: use cable kind for now
+                            thickness: 1.5,
+                            color: [0.0, 1.0, 1.0, 0.8], // Cyan
+                            temporal: TemporalStrategy::Fluid(0.1),
+                        });
+                    }
+                }
+            }
+            Spectrum { id, data } => {
+                let id_stable = SurfaceId::from_seed(id);
+                // 1. Background
+                primitives.push(SurfacePrimitive::Frame {
+                    id: id_stable,
+                    rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
+                    style: FrameStyle::Standard,
+                    color: [0.01, 0.01, 0.01, 1.0],
+                    temporal: TemporalStrategy::Instant,
+                });
+                
+                // 2. Spectrum Bars/Line
+                if data.len() > 1 {
+                    let step = size.x / (data.len() - 1) as f32;
+                    let bottomY = rounded_pos.y + size.y;
+                    let scaleY = size.y * 0.9;
+                    
+                    for i in 0..(data.len() - 1) {
+                        primitives.push(SurfacePrimitive::Curve {
+                            id: id_stable,
+                            control_points: vec![
+                                [rounded_pos.x + i as f32 * step, bottomY - data[i] * scaleY],
+                                [rounded_pos.x + (i + 1) as f32 * step, bottomY - data[i+1] * scaleY],
+                            ],
+                            kind: crate::ui_ir::CurveKind::Cable,
+                            thickness: 2.0,
+                            color: [1.0, 0.2, 0.5, 0.9], // Pink/Magenta for spectrum
+                            temporal: TemporalStrategy::Fluid(0.08),
+                        });
+                    }
+                }
+            }
+
+
+            ForensicMonitor { id, data } => {
+                let id_stable = *id;
+                // 1. Background (Authority Glass)
+                primitives.push(SurfacePrimitive::Frame {
+                    id: id_stable,
+                    rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
+                    style: FrameStyle::AuthorityGlass,
+                    color: [0.1, 0.1, 0.1, 0.8],
+                    temporal: TemporalStrategy::Instant,
+                });
+                
+                // 2. CPU Meter (Authority Lime)
+                let cpu_norm = (data.cpu_micros / 1000.0).min(1.0);
+                primitives.push(SurfacePrimitive::Indicator {
+                    id: id_stable,
+                    rect: [rounded_pos.x + 8.0, rounded_pos.y + 8.0, size.x - 16.0, 4.0],
+                    kind: IndicatorKind::Led,
+                    value: cpu_norm,
+                    color: [0.75, 1.0, 0.0, 1.0], // Lime
+                    temporal: TemporalStrategy::Fast(0.1),
+                });
+
+                // 3. Status Indicators (CLIP & NaN)
+                if data.has_clipped {
+                    primitives.push(SurfacePrimitive::Indicator {
+                        id: id_stable,
+                        rect: [rounded_pos.x + 8.0, rounded_pos.y + 16.0, 12.0, 12.0],
+                        kind: IndicatorKind::Led,
+                        value: 1.0,
+                        color: [1.0, 0.1, 0.1, 1.0], // Red
+                        temporal: TemporalStrategy::Instant,
+                    });
+                }
+                if data.has_nan {
+                    primitives.push(SurfacePrimitive::Indicator {
+                        id: id_stable,
+                        rect: [rounded_pos.x + 24.0, rounded_pos.y + 16.0, 12.0, 12.0],
+                        kind: IndicatorKind::Led,
+                        value: 1.0,
+                        color: [1.0, 0.5, 0.0, 1.0], // Orange
+                        temporal: TemporalStrategy::Instant,
+                    });
+                }
+            }
+            PrimitiveStream { primitives: stream_primitives } => {
+                for p in stream_primitives {
+                    let mut p_cloned = p.clone();
+                    Self::offset_primitive(&mut p_cloned, rounded_pos);
+                    primitives.push(p_cloned);
+                }
+            }
+            Timeline { id, snapshots, current_idx } => {
+                // 1. Background Bar
+                primitives.push(SurfacePrimitive::Frame {
+                    id: *id,
+                    rect: [rounded_pos.x, rounded_pos.y + 16.0, size.x, 8.0],
+                    style: FrameStyle::Standard,
+                    color: [0.1, 0.1, 0.1, 1.0],
+                    temporal: TemporalStrategy::Instant,
+                });
+
+                // 2. Markers for each snapshot
+                let count = snapshots.len();
+                if count > 1 {
+                    for i in 0..count {
+                        let progress = i as f32 / (count - 1) as f32;
+                        let is_current = i == *current_idx;
+                        primitives.push(SurfacePrimitive::Indicator {
+                            id: *id,
+                            rect: [rounded_pos.x + progress * size.x - 4.0, rounded_pos.y + 12.0, 8.0, 16.0],
+                            kind: IndicatorKind::Led,
+                            value: if is_current { 1.0 } else { 0.3 },
+                            color: if is_current { Color::ACCENT_LIME.to_array() } else { [0.5, 0.5, 0.5, 1.0] },
+                            temporal: TemporalStrategy::Standard(0.04),
+                        });
+                    }
+                }
+            }
             _ => {}
         }
     }
 
     pub fn generate_instances(&mut self) -> Vec<render::sdf::SdfInstance> {
-        let primitives = self.primitive_stream.lock().unwrap().clone();
+        let mut primitives = self.primitive_stream.lock().unwrap().clone();
+        
+        // Inject Active Interaction Primitives
+        match &self.input.session {
+            crate::runtime::interaction_kernel::DragSession::Connecting { from_port, current_pos } => {
+                let start_pos = self.port_geometry.iter()
+                    .find(|(id, _)| id == from_port)
+                    .map(|(_, circle)| circle.center)
+                    .unwrap_or(glam::Vec2::ZERO);
+
+                primitives.push(SurfacePrimitive::Curve {
+                    id: SurfaceId::generate(),
+                    control_points: vec![[start_pos.x, start_pos.y], [current_pos.x, current_pos.y]],
+                    kind: crate::ui_ir::CurveKind::Cable,
+                    thickness: 3.0,
+                    color: [1.0, 1.0, 1.0, 0.5],
+                    temporal: TemporalStrategy::Instant,
+                });
+            }
+
+            _ => {}
+        }
+
         let mut instances = Vec::new();
+
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame_time).as_secs_f32();
         self.last_frame_time = now;

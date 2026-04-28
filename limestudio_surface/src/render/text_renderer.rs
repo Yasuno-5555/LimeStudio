@@ -8,6 +8,12 @@ use glyphon::{
     Resolution, TextArea, Color, Cache, Viewport
 };
 use wgpu::{Device, Queue, TextureFormat, MultisampleState, RenderPass};
+pub struct TextBlock {
+    pub buffer: Buffer,
+    pub pos: glam::Vec2,
+    pub color: glyphon::Color,
+}
+
 pub struct TypographySystem {
     pub font_system: FontSystem,
     pub swash_cache: SwashCache,
@@ -15,7 +21,7 @@ pub struct TypographySystem {
     pub renderer: TextRenderer,
     pub cache: Cache,
     pub viewport: Viewport,
-    pub buffers: Vec<Buffer>,
+    pub blocks: Vec<TextBlock>,
 }
 
 impl TypographySystem {
@@ -34,7 +40,7 @@ impl TypographySystem {
             renderer,
             cache,
             viewport,
-            buffers: Vec::new(),
+            blocks: Vec::new(),
         }
     }
 
@@ -44,14 +50,14 @@ impl TypographySystem {
 
     /// Clear all temporary text buffers.
     pub fn clear(&mut self) {
-        self.buffers.clear();
+        self.blocks.clear();
     }
 
     /// Prepare a new block of text to be rendered.
     pub fn add_text(
         &mut self,
         text: &str,
-        _pos: glam::Vec2,
+        pos: glam::Vec2,
         font_size: f32,
         line_height: f32,
         color: crate::color::Color,
@@ -60,15 +66,16 @@ impl TypographySystem {
         buffer.set_size(&mut self.font_system, Some(800.0), Some(600.0)); // Max bounds
         
         let attrs = Attrs::new().family(Family::Monospace);
-        let (_r, _g, _b, _a) = color.to_rgba_u8();
+        let (r, g, b, a) = color.to_rgba_u8();
         
         buffer.set_text(&mut self.font_system, text, attrs, Shaping::Advanced);
         buffer.shape_until_scroll(&mut self.font_system, true);
 
-        // We store the position in a wrap or just use it during render
-        // For simplicity, we'll assume the caller manages layout and we just buffer it.
-        // In a real implementation, we'd store (buffer, pos, color) triplets.
-        self.buffers.push(buffer);
+        self.blocks.push(TextBlock {
+            buffer,
+            pos,
+            color: Color::rgba(r, g, b, a),
+        });
     }
 
     pub fn render<'a>(
@@ -77,19 +84,19 @@ impl TypographySystem {
         queue: &Queue,
         rpass: &mut RenderPass<'a>,
     ) {
-        let text_areas: Vec<TextArea> = self.buffers.iter().map(|buffer| {
+        let text_areas: Vec<TextArea> = self.blocks.iter().map(|block| {
             TextArea {
-                buffer,
-                left: 0.0, // TODO: Use real positions
-                top: 0.0,
+                buffer: &block.buffer,
+                left: block.pos.x,
+                top: block.pos.y,
                 scale: 1.0,
                 bounds: glyphon::TextBounds {
                     left: 0,
                     top: 0,
-                    right: 800,
-                    bottom: 600,
+                    right: 2048, // Large enough for now
+                    bottom: 2048,
                 },
-                default_color: Color::rgb(255, 255, 255),
+                default_color: block.color,
                 custom_glyphs: &[],
             }
         }).collect();
@@ -107,3 +114,4 @@ impl TypographySystem {
         self.renderer.render(&self.atlas, &self.viewport, rpass).unwrap();
     }
 }
+

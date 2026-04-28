@@ -6,6 +6,15 @@ use serde::{Serialize, Deserialize};
 pub use crate::model::stable_id::SurfaceId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DisplaySignal {
+    Static(f32),
+    Linear(f32),
+    Meter { value: f32, peak: f32 },
+    Reactive { source: SurfaceId, factor: f32 },
+    Forensic { metric: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SurfaceWidget {
     DataTable {
         id: SurfaceId,
@@ -43,31 +52,36 @@ pub enum SurfaceWidget {
     Knob {
         id: SurfaceId,
         label: String,
-        signal: dirtydata_core::types::DisplaySignal,
+        signal: DisplaySignal,
     },
     Slider {
         id: SurfaceId,
         label: String,
-        signal: dirtydata_core::types::DisplaySignal,
+        signal: DisplaySignal,
         is_vertical: bool,
     },
     LevelMeter {
         id: String,
-        signal: dirtydata_core::types::DisplaySignal,
+        signal: DisplaySignal,
     },
     Waveform {
         id: String,
         data: Vec<f32>,
     },
+    Spectrum {
+        id: String,
+        data: Vec<f32>,
+    },
     CodeView {
+
         code: String,
         language: String,
     },
     XYPad {
         id: SurfaceId,
         label: String,
-        x_signal: dirtydata_core::types::DisplaySignal,
-        y_signal: dirtydata_core::types::DisplaySignal,
+        x_signal: DisplaySignal,
+        y_signal: DisplaySignal,
     },
     /// Custom: User-defined widget with explicit layout and primitives.
     /// This is the escape hatch for "Flutter-like" extensibility.
@@ -80,7 +94,36 @@ pub enum SurfaceWidget {
     PrimitiveStream {
         primitives: Vec<SurfacePrimitive>,
     },
+    ForensicMonitor {
+        id: SurfaceId,
+        data: TelemetryData,
+    },
+    Timeline {
+        id: SurfaceId,
+        snapshots: Vec<String>, // Hash or timestamp identifiers
+        current_idx: usize,
+    },
 }
+
+impl SurfaceWidget {
+    pub fn id(&self) -> Option<&SurfaceId> {
+        match self {
+            Self::DataTable { id, .. } => Some(id),
+            Self::TreeView { id, .. } => Some(id),
+            Self::Terminal { id, .. } => Some(id),
+            Self::Button { id, .. } => Some(id),
+            Self::Knob { id, .. } => Some(id),
+            Self::Slider { id, .. } => Some(id),
+            Self::XYPad { id, .. } => Some(id),
+            Self::Custom { id, .. } => Some(id),
+            Self::ForensicMonitor { id, .. } => Some(id),
+            Self::Timeline { id, .. } => Some(id),
+            _ => None,
+        }
+    }
+}
+
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SurfacePrimitive {
@@ -181,6 +224,15 @@ pub enum SurfacePrimitive {
         placements: Vec<GlyphPlacement>,
         color: [f32; 4],
     },
+    /// Text: High-level text rendering
+    Text {
+        id: SurfaceId,
+        rect: [f32; 4],
+        text: String,
+        font_size: f32,
+        color: [f32; 4],
+    },
+
     /// ConstraintBox: Layout semantic primitive (The Place)
     ConstraintBox {
         id: SurfaceId,
@@ -324,8 +376,9 @@ pub enum TemporalStrategy {
     Fluid(f32),
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FrameStyle {
+
     Standard, // Pd Object
     Message,  // Pd Message (Flag)
     Number,   // Pd Number (Chamfered)
@@ -384,4 +437,13 @@ pub struct GlyphPlacement {
     pub glyph_id: u32,
     pub pos: [f32; 2],
     pub scale: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TelemetryData {
+    pub cpu_micros: f32,
+    pub peak_cpu_micros: f32,
+    pub has_clipped: bool,
+    pub has_nan: bool,
+    pub active_voices: usize,
 }

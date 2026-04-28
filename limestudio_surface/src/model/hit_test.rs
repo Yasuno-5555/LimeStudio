@@ -9,7 +9,9 @@ pub enum HitResult {
     Node(SurfaceId),
     Port(SurfaceId),
     Cable(SurfaceId),
+    Widget(SurfaceId, Vec2), // Local position within widget
 }
+
 
 pub struct HitTester;
 

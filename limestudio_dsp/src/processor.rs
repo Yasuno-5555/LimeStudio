@@ -37,7 +37,7 @@ impl SpectralAnalyzer {
     }
 
     /// 固定長ブロックを受け取り、スペクトルを計算して返す
-    pub fn compute_spectrum(&mut self, input: &[f32]) -> Vec<Complex64> {
+    pub fn compute_spectrum(&mut self, input: &[f32]) -> &[Complex64] {
         // Assert input length?
         let len = input.len().min(self.fft_size);
         
@@ -52,9 +52,10 @@ impl SpectralAnalyzer {
         // FFT
         self.fft.process_with_scratch(&mut self.fft_input, &mut self.fft_scratch);
 
-        self.fft_input.clone() // TODO: Avoid clone by returning slice or reference if possible, but lifecycle is tricky
+        &self.fft_input
     }
 }
+
 
 /// 2. Synthesis Stage: 特定のスケールの再構成 (IFFT) を担当 (No OLA, just IFFT block)
 pub struct ScaleSynthesizer {

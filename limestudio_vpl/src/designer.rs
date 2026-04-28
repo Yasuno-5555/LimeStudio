@@ -1,8 +1,7 @@
 use eframe::egui;
 use crate::style::colors;
 use limestudio_core::view::WidgetType;
-use limestudio_core::node_discovery::{NodeRegistry};
-use dirtydata_core::types::{SignalUnit};
+use limestudio_core::node_discovery::{NodeRegistry, SignalUnit};
 
 pub struct DesignerState {
     pub registry: std::sync::Arc<NodeRegistry>,
@@ -77,7 +76,7 @@ impl DesignerState {
     pub fn suggest_widget(&self, unit: SignalUnit) -> WidgetType {
         match unit {
             SignalUnit::Hertz | SignalUnit::Normalized | SignalUnit::Bipolar => WidgetType::ModulationRing,
-            SignalUnit::Decibel => WidgetType::Meter,
+            SignalUnit::Decibels => WidgetType::Meter,
             _ => WidgetType::Knob,
         }
     }

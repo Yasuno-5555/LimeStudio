@@ -1,5 +1,5 @@
 use crate::PatchEvent;
-use dirtydata_runtime::jit::{ExecutionPlan, PlanCompiler};
+use dirtydata_runtime::jit::{JitProgram, JitCompiler};
 use dirtydata_runtime::nodes::base::ProcessContext as DspProcessContext;
 use rtrb::Consumer;
 
@@ -24,13 +24,13 @@ pub enum VoiceEvent {
 }
 
 pub struct VoicePlan {
-    pub plan: ExecutionPlan,
+    pub plan: JitProgram,
     pub state: VoiceState,
     pub last_level: f32,
 }
 
 impl VoicePlan {
-    pub fn new(plan: ExecutionPlan) -> Self {
+    pub fn new(plan: JitProgram) -> Self {
         Self {
             plan,
             state: VoiceState::Idle,
@@ -74,11 +74,10 @@ impl VoicePlan {
                     *fade_out_samples -= 1;
                 } else if let Some((new_pitch, new_velocity)) = *next_note {
                     self.state = VoiceState::Active { pitch: new_pitch, velocity: new_velocity, age: 0 };
-                    // Reset plan state
-                    self.plan.registers.fill([0.0, 0.0]);
-                    self.plan.set_parameter("gate", 1.0);
-                    self.plan.set_parameter("velocity", new_velocity);
-                    self.plan.set_parameter("pitch", new_pitch as f32);
+                    self.state = VoiceState::Active { pitch: new_pitch, velocity: new_velocity, age: 0 };
+                    self.plan.set_parameter_by_name("gate", 1.0);
+                    self.plan.set_parameter_by_name("velocity", new_velocity);
+                    self.plan.set_parameter_by_name("pitch", new_pitch as f32);
                 } else {
                     self.state = VoiceState::Idle;
                 }
@@ -124,13 +123,12 @@ impl VoiceManager {
         sample_rate: f32,
         telemetry: Option<crate::telemetry::TelemetryProducer>,
     ) -> Self {
-        let mut compiler = PlanCompiler::new();
-        let _base_plan = compiler.compile(graph);
+        let dsp_runner = dirtydata_runtime::DspRunner::new(graph.clone(), None, sample_rate);
         
         let mut voices = Vec::with_capacity(num_voices);
         for _ in 0..num_voices {
-            let mut compiler = PlanCompiler::new();
-            let plan = compiler.compile(graph);
+            let mut compiler = JitCompiler::new();
+            let plan = compiler.compile_runner(&dsp_runner).expect("Failed to compile JIT program");
             voices.push(VoicePlan::new(plan));
         }
         
@@ -149,10 +147,10 @@ impl VoiceManager {
                 // 1. Find an idle voice
                 if let Some((idx, voice)) = self.voices.iter_mut().enumerate().find(|(_, v)| v.state == VoiceState::Idle) {
                     voice.state = VoiceState::Active { pitch, velocity, age:0 };
-                    voice.plan.set_parameter("gate", 1.0);
-                    voice.plan.set_parameter("velocity", velocity);
-                    voice.plan.set_parameter("pitch", pitch as f32);
-                    voice.plan.set_parameter("tuning", 0.0); // Reset tuning for new note
+                    voice.plan.set_parameter_by_name("gate", 1.0);
+                    voice.plan.set_parameter_by_name("velocity", velocity);
+                    voice.plan.set_parameter_by_name("pitch", pitch as f32);
+                    voice.plan.set_parameter_by_name("tuning", 0.0); // Reset tuning for new note
                     
                     if let Some(tel) = &mut self.telemetry {
                         tel.push(crate::telemetry::TelemetryEvent::VoiceActive { index: idx, pitch, velocity });
@@ -180,8 +178,8 @@ impl VoiceManager {
                             fade_out_samples: 220,
                             next_note: Some((pitch, velocity)),
                         };
-                        voice.plan.set_parameter("gate", 0.0);
-                        voice.plan.set_parameter("tuning", 0.0); // Reset tuning
+                        voice.plan.set_parameter_by_name("gate", 0.0);
+                        voice.plan.set_parameter_by_name("tuning", 0.0); // Reset tuning
                     }
                     VoiceState::Stealing { ref mut next_note, .. } => {
                         // If already stealing, just replace the next note
@@ -198,7 +196,7 @@ impl VoiceManager {
                     if let VoiceState::Active { pitch: p, age, .. } = voice.state {
                         if p == pitch {
                             voice.state = VoiceState::Release { pitch, age };
-                            voice.plan.set_parameter("gate", 0.0);
+                            voice.plan.set_parameter_by_name("gate", 0.0);
                             
                             if let Some(tel) = &mut self.telemetry {
                                 tel.push(crate::telemetry::TelemetryEvent::VoiceReleased { index: idx });
@@ -211,7 +209,7 @@ impl VoiceManager {
                 for voice in self.voices.iter_mut() {
                     if let VoiceState::Active { pitch: p, .. } = voice.state {
                         if p == pitch {
-                            voice.plan.set_parameter("pressure", value);
+                            voice.plan.set_parameter_by_name("pressure", value);
                         }
                     }
                 }
@@ -220,7 +218,7 @@ impl VoiceManager {
                 for voice in self.voices.iter_mut() {
                     if let VoiceState::Active { pitch: p, .. } = voice.state {
                         if p == pitch {
-                            voice.plan.set_parameter("tuning", value);
+                            voice.plan.set_parameter_by_name("tuning", value);
                         }
                     }
                 }
@@ -237,7 +235,7 @@ impl VoiceManager {
             match event {
                 PatchEvent::SetParameter { param_id, value } => {
                     for voice in &mut self.voices {
-                        voice.plan.set_parameter(&param_id, value);
+                        voice.plan.set_parameter_by_name(&param_id, value);
                     }
                 }
             }
@@ -272,12 +270,20 @@ impl VoiceManager {
                 
                 // Setup input registers (Shared for all voices)
                 if !inputs.is_empty() {
-                    let input_l = inputs[0][i];
-                    let input_r = if inputs.len() > 1 { inputs[1][i] } else { input_l };
-                    voice.plan.registers[1] = [input_l, input_r];
+                    let _input_l = inputs[0][i];
+                    let _input_r = if inputs.len() > 1 { inputs[1][i] } else { _input_l };
+                    // TODO: Map inputs to JIT memory if needed
                 }
 
                 let out = voice.process_sample(&ctx);
+                
+                // NaN Detection
+                if out[0].is_nan() || out[1].is_nan() {
+                    if let Some(tel) = &mut self.telemetry {
+                        tel.push(crate::telemetry::TelemetryEvent::NanDetected { node_id: None });
+                    }
+                }
+
                 outputs[0][i] += out[0];
                 if num_outputs > 1 {
                     outputs[1][i] += out[1];

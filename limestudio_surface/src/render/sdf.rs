@@ -22,6 +22,7 @@ pub struct SdfInstance {
 pub struct SdfPipeline {
     pub pipeline: wgpu::RenderPipeline,
     pub instance_buffer: wgpu::Buffer,
+    pub global_bind_group_layout: wgpu::BindGroupLayout,
     pub max_instances: usize,
 }
 
@@ -29,9 +30,25 @@ impl SdfPipeline {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::include_wgsl!("sdf.wgsl"));
 
+        let global_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("SDF Global Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("SDF Pipeline Layout"),
-            bind_group_layouts: &[],
+            bind_group_layouts: &[&global_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -119,11 +136,19 @@ impl SdfPipeline {
         Self {
             pipeline,
             instance_buffer,
+            global_bind_group_layout,
             max_instances: 1024,
         }
     }
 
     pub fn write_instances(&self, queue: &wgpu::Queue, instances: &[SdfInstance]) {
         queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(instances));
+    }
+
+    pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, global_bind_group: &'a wgpu::BindGroup, num_instances: u32) {
+        rpass.set_pipeline(&self.pipeline);
+        rpass.set_bind_group(0, global_bind_group, &[]);
+        rpass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+        rpass.draw(0..4, 0..num_instances);
     }
 }
