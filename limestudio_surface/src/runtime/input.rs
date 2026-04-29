@@ -59,7 +59,13 @@ pub enum Key {
     Delete,
     Enter,
     Escape,
-    // Add more as needed
+    Tab,
+    Backspace,
+    Up,
+    Down,
+    Left,
+    Right,
+    Char(char),
 }
 
 /// Drag Hysteresis Standard

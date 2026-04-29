@@ -25,23 +25,20 @@ impl MotionState {
         target: f32,
         delta_time: f32,
         stiffness: f32,
+        damping: f32,
     ) -> f32 {
         if delta_time <= 0.0 { return self.value; }
         
-        // ω (Natural frequency) = sqrt(stiffness)
-        // For critical damping, c = 2 * ω
-        let omega = stiffness.sqrt();
         let h = delta_time;
-        
-        // Implicit integration for stability:
-        // v_{n+1} = v_n + h * a_{n+1}
-        // a_{n+1} = -ω^2 * (x_{n+1} - target) - 2ω * v_{n+1}
-        // x_{n+1} = x_n + h * v_{n+1}
-        
         let x_diff = self.value - target;
-        let det = 1.0 + 2.0 * h * omega + h * h * omega * omega;
         
-        let new_v = (self.velocity - h * omega * omega * x_diff) / det;
+        // v_{n+1} = v_n + h * (-k * x_{n+1} - c * v_{n+1})
+        // x_{n+1} = x_n + h * v_{n+1}
+        // Solving for v_{n+1}:
+        // v_{n+1} (1 + h*c + h*h*k) = v_n - h*k*x_n
+        
+        let det = 1.0 + h * damping + h * h * stiffness;
+        let new_v = (self.velocity - h * stiffness * x_diff) / det;
         let new_x = self.value + h * new_v;
         
         self.velocity = new_v;
@@ -50,12 +47,14 @@ impl MotionState {
     }
 }
 
-/// Standard spring constants for Lime Surface
+/// Standard spring constants for Lime Surface (HIG 3.1)
 pub mod constants {
-    /// 60ms response (ω ≈ 16.6) -> stiffness ≈ 275
-    pub const STIFFNESS_NORMAL: f32 = 275.0;
-    /// 20ms response (ω ≈ 50.0) -> stiffness ≈ 2500
-    pub const STIFFNESS_FAST: f32 = 2500.0;
-    /// 150ms response (ω ≈ 6.6) -> stiffness ≈ 44
-    pub const STIFFNESS_SLOW: f32 = 44.0;
+    pub const STIFFNESS_STANDARD: f32 = 300.0;
+    pub const DAMPING_STANDARD: f32 = 35.0;
+
+    pub const STIFFNESS_FAST: f32 = 600.0;
+    pub const DAMPING_FAST: f32 = 50.0;
+
+    pub const STIFFNESS_SLOW: f32 = 150.0;
+    pub const DAMPING_SLOW: f32 = 25.0;
 }

@@ -62,7 +62,7 @@ impl InteractiveEnvelope {
             kind: CurveKind::Envelope,
             thickness: 2.0,
             color: self.colors.line.to_array(),
-            temporal: TemporalStrategy::Standard(0.1),
+            temporal: TemporalStrategy::Standard,
         });
 
         // 2. Control Points
@@ -74,7 +74,7 @@ impl InteractiveEnvelope {
                 kind: IndicatorKind::Led,
                 value: if is_selected { 1.0 } else { 0.5 },
                 color: if is_selected { self.colors.selection.to_array() } else { self.colors.point.to_array() },
-                temporal: TemporalStrategy::Fast(0.06),
+                temporal: TemporalStrategy::Fast,
             });
         }
 

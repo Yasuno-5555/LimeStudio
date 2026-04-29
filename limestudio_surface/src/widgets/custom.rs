@@ -13,7 +13,7 @@ impl CustomWidget {
             start_angle: -140.0,
             end_angle: -140.0 + (value * 280.0),
             kind: ArcKind::Modulation,
-            temporal: TemporalStrategy::Fast(0.02), // Fast 20ms for modulation
+            temporal: TemporalStrategy::Fast, // Fast 20ms for modulation
         }
     }
 }

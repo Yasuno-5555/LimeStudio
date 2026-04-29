@@ -234,6 +234,10 @@ impl TransactionLayer {
                     }
                     self.reconcile_ui_state();
                 }
+                EngineResponse::Telemetry { .. } => {
+                    // For now, Telemetry is handled by the UI engine directly or passed through
+                    // In a real implementation, we'd update a real-time monitor here.
+                }
             }
         }
     }

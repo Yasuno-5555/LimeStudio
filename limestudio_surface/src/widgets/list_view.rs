@@ -63,7 +63,7 @@ impl SurfaceListView {
                 rect: [self.position.x, item_y, self.size.x, self.item_height],
                 style: FrameStyle::Standard,
                 color: if is_selected { self.colors.selection.to_array() } else { self.colors.item_bg.to_array() },
-                temporal: TemporalStrategy::Fast(0.06),
+                temporal: TemporalStrategy::Fast,
             });
 
             // Item Text

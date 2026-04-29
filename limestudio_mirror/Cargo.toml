@@ -1,0 +1,22 @@
+[package]
+name = "limestudio_mirror"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+limestudio_surface = { path = "../limestudio_surface" }
+limestudio_core = { path = "../limestudio_core" }
+dirtydata-core = { path = "../DirtyData/crates/dirtydata-core" }
+dirtydata-runtime = { path = "../DirtyData/crates/dirtydata-runtime" }
+
+wgpu.workspace = true
+winit.workspace = true
+glam.workspace = true
+log.workspace = true
+env_logger = "0.11"
+tokio = { version = "1", features = ["full"] }
+anyhow.workspace = true
+pollster.workspace = true
+taffy.workspace = true
+rustfft = "6.1"
+dirtydata-dsp-fft = { path = "../DirtyData/crates/dirtydata-dsp-fft" }

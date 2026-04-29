@@ -15,7 +15,7 @@ impl PdCompat {
                 id,
                 rect: [pos[0] - 2.0, pos[1] - 2.0, size + 4.0, size + 4.0],
                 color: Color::ACCENT_BLUE.to_array(),
-                temporal: TemporalStrategy::Standard(0.06),
+                temporal: TemporalStrategy::Standard,
             });
         }
 
@@ -33,7 +33,7 @@ impl PdCompat {
             kind: IndicatorKind::Bang,
             value: flash_state,
             color: Color::ACCENT_LIME.to_array(),
-            temporal: TemporalStrategy::Fast(0.06),
+            temporal: TemporalStrategy::Fast,
         });
 
         primitives
@@ -47,7 +47,7 @@ impl PdCompat {
                 id,
                 rect: [pos[0] - 2.0, pos[1] - 2.0, size + 4.0, size + 4.0],
                 color: Color::ACCENT_BLUE.to_array(),
-                temporal: TemporalStrategy::Standard(0.06),
+                temporal: TemporalStrategy::Standard,
             });
         }
 
@@ -65,7 +65,7 @@ impl PdCompat {
             kind: IndicatorKind::Toggle,
             value: if is_on { 1.0 } else { 0.0 },
             color: Color::ACCENT_LIME.to_array(),
-            temporal: TemporalStrategy::Standard(0.06),
+            temporal: TemporalStrategy::Standard,
         });
 
         primitives

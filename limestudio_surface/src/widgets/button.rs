@@ -44,7 +44,7 @@ impl SurfaceButton {
                 id: self.id,
                 rect: [self.position.x - 2.0, self.position.y - 2.0, self.size.x + 4.0, self.size.y + 4.0],
                 color: Color::ACCENT_BLUE.to_array(),
-                temporal: TemporalStrategy::Standard(0.06),
+                temporal: TemporalStrategy::Standard,
             });
         }
         
@@ -54,7 +54,7 @@ impl SurfaceButton {
             rect: [self.position.x, self.position.y, self.size.x, self.size.y],
             style: FrameStyle::Standard,
             color: if self.is_pressed { self.colors.active.to_array() } else { self.colors.base.to_array() },
-            temporal: TemporalStrategy::Standard(0.06),
+            temporal: TemporalStrategy::Standard,
         });
 
         // 2. Label

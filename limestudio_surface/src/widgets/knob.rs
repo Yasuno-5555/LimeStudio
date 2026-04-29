@@ -113,7 +113,7 @@ impl ParamKnob {
                 id: self.id,
                 rect: [self.position.x - self.radius, self.position.y - self.radius, self.radius * 2.0, self.radius * 2.0],
                 color: Color::ACCENT_BLUE.to_array(),
-                temporal: TemporalStrategy::Standard(0.06),
+                temporal: TemporalStrategy::Standard,
             });
         }
         
@@ -140,7 +140,7 @@ impl ParamKnob {
             start_angle,
             end_angle,
             kind: ArcKind::Value,
-            temporal: TemporalStrategy::Standard(0.06), // 60ms
+            temporal: TemporalStrategy::Standard, // 60ms
         });
 
         // 2. Modulation Range (Forensic Trace)
@@ -157,7 +157,7 @@ impl ParamKnob {
                 start_angle: mod_start,
                 end_angle: mod_end,
                 kind: ArcKind::Modulation,
-                temporal: TemporalStrategy::Fast(0.02), // 20ms for modulation
+                temporal: TemporalStrategy::Fast, // 20ms for modulation
             });
         }
 
@@ -168,7 +168,7 @@ impl ParamKnob {
             kind: IndicatorKind::Led,
             value: if self.state.is_dragging { 1.0 } else { 0.5 },
             color: if self.state.is_dragging { self.colors.active.to_array() } else { self.colors.base.to_array() },
-            temporal: TemporalStrategy::Standard(0.06),
+            temporal: TemporalStrategy::Standard,
         });
 
         primitives

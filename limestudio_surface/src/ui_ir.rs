@@ -15,6 +15,30 @@ pub enum DisplaySignal {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SurfaceAccessibilityData {
+    pub label: String,
+    pub role: SemanticRole,
+    pub description: Option<String>,
+    pub hint: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum SemanticRole {
+    None,
+    Button,
+    Slider,
+    Knob,
+    NumberBox,
+    TextInput,
+    Heading,
+    Status,
+    Alert,
+    Terminal,
+    Node,
+    Canvas,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SurfaceWidget {
     DataTable {
         id: SurfaceId,
@@ -100,8 +124,20 @@ pub enum SurfaceWidget {
     },
     Timeline {
         id: SurfaceId,
-        snapshots: Vec<String>, // Hash or timestamp identifiers
+        snapshots: Vec<String>,
         current_idx: usize,
+    },
+    /// Focused: Special wrapper or state for focusing.
+    /// In Lime, focus is a first-class citizen.
+    FocusProxy {
+        id: SurfaceId,
+        child: Box<SurfaceWidget>,
+        is_focused: bool,
+    },
+    /// Accessibility Wrapper: Purely for providing A11y context
+    Accessibility {
+        data: SurfaceAccessibilityData,
+        child: Box<SurfaceWidget>,
     },
 }
 
@@ -368,12 +404,12 @@ pub enum ProjectionPolicy {
 pub enum TemporalStrategy {
     /// Instant: Snap to latest truth (Playhead, Trigger)
     Instant,
-    /// Fast: ~20ms. Acoustic Contract (Modulation visualizer)
-    Fast(f32),
-    /// Standard: ~60ms. Interaction Contract (Knob moves, Hover)
-    Standard(f32),
-    /// Fluid: ~150ms. Perceptual Buffer (Meter release)
-    Fluid(f32),
+    /// Fast: Stiff 600, Damping 50 (Button 반응など)
+    Fast,
+    /// Standard: Stiff 300, Damping 35 (一般的な遷移)
+    Standard,
+    /// Slow: Stiff 150, Damping 25 (背景の変化など)
+    Slow,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -447,3 +483,4 @@ pub struct TelemetryData {
     pub has_nan: bool,
     pub active_voices: usize,
 }
+

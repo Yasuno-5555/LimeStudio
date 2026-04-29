@@ -10,6 +10,7 @@ struct VertexOutput {
     @location(4) modulation_current: f32,
     @location(5) params: vec4<f32>,
     @location(6) params2: vec4<f32>,
+    @location(7) size: vec2<f32>,
 }
 
 struct CameraUniform {
@@ -51,6 +52,7 @@ fn vs_main(
     out.modulation_current = modulation_current;
     out.params = params;
     out.params2 = params2;
+    out.size = size;
     return out;
 }
 
@@ -63,7 +65,12 @@ fn sd_circle(p: vec2<f32>, r: f32) -> f32 {
 fn sd_arc(p: vec2<f32>, sc: vec2<f32>, ra: f32, rb: f32) -> f32 {
     var p_mut = p;
     p_mut.x = abs(p_mut.x);
-    let k = if sc.y * p_mut.x > sc.x * p_mut.y { dot(p_mut, sc) } else { length(p_mut) };
+    var k: f32;
+    if (sc.y * p_mut.x > sc.x * p_mut.y) {
+        k = dot(p_mut, sc);
+    } else {
+        k = length(p_mut);
+    }
     return sqrt(dot(p_mut, p_mut) + ra * ra - 2.0 * ra * k) - rb;
 }
 
@@ -173,50 +180,31 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         // params: [style_type, stroke_width, _, _]
         let style = u32(in.params.x);
         let stroke = in.params.y;
-        
-        if (style == 1u) {
-            // Message Box Flag (Right side extension)
-            let q = in.uv;
-            let d1 = sd_rounded_box(q, vec2<f32>(1.0, 1.0), vec4<f32>(0.0));
-            // Flag cut (Simplified: just a rectangle with a bite taken out or a flag tail)
-            // Pure Data message box has a small 'tail' on the right.
-            let tail = sd_segment(q, vec2<f32>(1.0, -0.5), vec2<f32>(1.2, 0.0));
-            d = min(d1, tail - 0.05);
-        } else if (style == 2u) {
-            // Number Box (Chamfered top-left)
-            d = sd_chamfered_box(in.uv, vec2<f32>(1.0, 1.0), 0.3);
+        if (style == 0u) {
+            // Standard Frame: Just a subtle rounded border
+            let box_d = sd_rounded_box(in.uv, vec2<f32>(0.95), vec4<f32>(0.1));
+            d = abs(box_d) - 0.02; // 2% thickness border
         } else {
-            // Standard Rect
             d = sd_rounded_box(in.uv, vec2<f32>(1.0, 1.0), vec4<f32>(0.0));
         }
-        
-        // Convert to stroke if needed
-        if (stroke > 0.0) {
-            d = abs(d) - stroke;
-        }
     } else if (in.shape_type == 6u) {
-        // PD_INDICATOR (Pd-style status indicators)
+        // PD_INDICATOR
         // params: [kind, state, _, _]
         let kind = u32(in.params.x);
         let state = in.params.y;
         
         if (kind == 0u) {
             // Bang (Circle in Square)
-            let outer = sd_rounded_box(in.uv, vec2<f32>(1.0), vec4<f32>(0.0));
-            let inner = sd_circle(in.uv, 0.7 * state); // Dynamic radius based on flash state
-            d = min(abs(outer) - 0.05, inner);
+            let box_d = sd_rounded_box(in.uv, vec2<f32>(0.9), vec4<f32>(0.0));
+            let circ_d = sd_circle(in.uv, 0.7 * state);
+            d = max(box_d, circ_d);
         } else if (kind == 1u) {
-            // Toggle (X in Square)
-            let outer = sd_rounded_box(in.uv, vec2<f32>(1.0), vec4<f32>(0.0));
-            let x1 = sd_segment(in.uv, vec2<f32>(-0.7), vec2<f32>(0.7));
-            let x2 = sd_segment(in.uv, vec2<f32>(0.7, -0.7), vec2<f32>(-0.7, 0.7));
-            let cross = min(x1, x2) - 0.1 * state;
-            d = min(abs(outer) - 0.05, cross);
+            // Toggle (Cross)
+            let box_d = sd_rounded_box(in.uv, vec2<f32>(0.9), vec4<f32>(0.0));
+            d = box_d; // TODO: Cross
         } else if (kind == 2u) {
-            // Radio (Dot in Square)
-            let outer = sd_rounded_box(in.uv, vec2<f32>(1.0), vec4<f32>(0.0));
-            let inner = sd_circle(in.uv, 0.4 * state);
-            d = min(abs(outer) - 0.05, inner);
+            // Number (Border)
+            d = abs(sd_rounded_box(in.uv, vec2<f32>(0.95), vec4<f32>(0.0))) - 0.02;
         } else if (kind == 3u) {
             // Led (Solid Glow)
             d = sd_circle(in.uv, 0.8 * state);
@@ -282,38 +270,18 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         
         return in.color * (alpha + glow * 0.5);
     } else if (in.shape_type == 11u) {
-        // BAR (Meter/Status Bar)
-        // params: [value, _, _, _]
-        let val = in.params.x;
-        let q = in.uv;
-        // Bar is -1..1 in UV space.
-        // If it's a vertical bar filling from bottom:
-        let fill_line = 1.0 - (val * 2.0); // 1.0 is bottom, -1.0 is top
-        d = sd_rounded_box(q, vec2<f32>(1.0, 1.0), vec4<f32>(0.0));
-        
-        if (q.y < fill_line) {
-            d = 1.0; // Outside fill
-        }
+        // Simple Glow Circle (for LEDs/Indicators)
+        // params: [radius_scale, _, _, _]
+        let r = max(0.1, in.params.x); 
+        d = sd_circle(in.uv, r * 0.8);
     }
 
-    // Antialiasing using fwidth
-    let fw = fwidth(d);
+    // 3. Antialiasing using stable width
+    // We use a small fixed width if fwidth is unavailable or zero
+    var fw = fwidth(d);
+    if (fw <= 0.0) { fw = 0.02; }
     let alpha = 1.0 - smoothstep(-fw, fw, d);
     
-    // 1. Semantic Occlusion (排他の法 - Negative Space)
-    // If we have an occlusion parameter, we 'eat' into the background.
-    // params2.z = occlusion_margin
-    let occlusion = in.params2.z;
-    if (occlusion > 0.0) {
-        // This logic requires a global SDF buffer or a multi-pass.
-        // For a single-pass instance, we can only occlude 'within' the primitive.
-        // We will implement this as a specialized pass in the engine.
-    }
-    
-    // 2. Boolean Intersection (交差の法)
-    // If the pixel is inside both A and B, flip lightness.
-
-    // Handle Oklab-like mix for states (Simplified linear for now as per shader capability)
     let final_color = in.color;
     return vec4<f32>(final_color.rgb, final_color.a * alpha);
 }

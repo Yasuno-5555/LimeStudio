@@ -18,6 +18,9 @@ pub enum InteractionIntent {
     MoveNode { id: SurfaceId, delta: Vec2 },
     UpdateParameter { node_id: SurfaceId, parameter: String, value: f32 },
     CompileCode { node_id: SurfaceId, source: String },
+    Commit,
+    Cancel,
+    DeleteSelected,
 }
 
 
@@ -53,6 +56,7 @@ pub enum DragSession {
 pub struct InteractionKernel {
     pub session: DragSession,
     pub selection: SelectionState,
+    pub focused_id: Option<SurfaceId>,
     pub last_world_pos: Vec2,
 }
 
@@ -65,6 +69,7 @@ impl InteractionKernel {
         Self {
             session: DragSession::None,
             selection: SelectionState::default(),
+            focused_id: None,
             last_world_pos: Vec2::ZERO,
         }
     }
@@ -132,8 +137,56 @@ impl InteractionKernel {
             SurfaceEvent::PointerUp { .. } => {
                 self.handle_up(nodes, ports)
             }
+            SurfaceEvent::KeyInput { key, pressed: true, modifiers } => {
+                self.handle_key(*key, modifiers, widgets)
+            }
             _ => vec![],
         }
+    }
+
+    fn handle_key(
+        &mut self, 
+        key: crate::runtime::input::Key, 
+        modifiers: &crate::runtime::input::Modifiers,
+        widgets: &[(SurfaceId, Rect)],
+    ) -> Vec<InteractionIntent> {
+        use crate::runtime::input::Key;
+        let mut intents = Vec::new();
+
+        match key {
+            Key::Tab => {
+                if widgets.is_empty() { return vec![]; }
+                
+                // HIG 5.3: Tab navigation
+                let current_idx = self.focused_id
+                    .and_then(|id| widgets.iter().position(|(wid, _)| wid == &id));
+                
+                let next_idx = if modifiers.shift {
+                    // Shift+Tab: Previous
+                    current_idx.map(|i| if i == 0 { widgets.len() - 1 } else { i - 1 })
+                        .unwrap_or(widgets.len() - 1)
+                } else {
+                    // Tab: Next
+                    current_idx.map(|i| (i + 1) % widgets.len())
+                        .unwrap_or(0)
+                };
+
+                self.focused_id = Some(widgets[next_idx].0);
+            }
+            Key::Enter => {
+                intents.push(InteractionIntent::Commit);
+            }
+            Key::Escape => {
+                intents.push(InteractionIntent::Cancel);
+                self.focused_id = None;
+            }
+            Key::Delete | Key::Backspace => {
+                intents.push(InteractionIntent::DeleteSelected);
+            }
+            _ => {}
+        }
+
+        intents
     }
 
     fn handle_down(&mut self, world_pos: Vec2, hit_result: HitResult, is_shift: bool) -> Vec<InteractionIntent> {

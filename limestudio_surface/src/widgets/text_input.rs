@@ -50,7 +50,7 @@ impl SurfaceTextInput {
                 id: self.id,
                 rect: [self.position.x - 2.0, self.position.y - 2.0, self.size.x + 4.0, self.size.y + 4.0],
                 color: Color::ACCENT_BLUE.to_array(),
-                temporal: TemporalStrategy::Standard(0.06),
+                temporal: TemporalStrategy::Standard,
             });
         }
         
@@ -81,7 +81,7 @@ impl SurfaceTextInput {
                 kind: IndicatorKind::Led,
                 value: 1.0,
                 color: self.colors.caret.to_array(),
-                temporal: TemporalStrategy::Fast(0.06),
+                temporal: TemporalStrategy::Fast,
             });
         }
 

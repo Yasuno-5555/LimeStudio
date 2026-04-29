@@ -39,7 +39,7 @@ impl CompilerLensOverlay {
             rect: [self.position.x, self.position.y, 200.0, 100.0],
             style: FrameStyle::Field,
             color: Color::AUTHORITY_BG.to_array(),
-            temporal: TemporalStrategy::Standard(0.1),
+            temporal: TemporalStrategy::Standard,
         });
 
         // 2. IR Content (Simplified placeholder)

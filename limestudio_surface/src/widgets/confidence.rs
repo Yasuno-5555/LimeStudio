@@ -24,7 +24,7 @@ impl ConfidenceVisualizer {
             id: self.id,
             rect: [self.position.x, self.position.y, 16.0, 16.0],
             level,
-            temporal: TemporalStrategy::Standard(0.1),
+            temporal: TemporalStrategy::Standard,
         }]
     }
 }

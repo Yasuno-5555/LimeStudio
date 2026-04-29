@@ -4475,6 +4475,7 @@ dependencies = [
  "toml 0.7.8",
  "tracing",
  "ulid",
+ "uuid 1.23.1",
 ]
 
 [[package]]
@@ -4521,6 +4522,27 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "limestudio_mirror"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirtydata-core",
+ "dirtydata-dsp-fft",
+ "dirtydata-runtime",
+ "env_logger",
+ "glam 0.24.2",
+ "limestudio_core",
+ "limestudio_surface",
+ "log",
+ "pollster",
+ "rustfft",
+ "taffy",
+ "tokio",
+ "wgpu",
+ "winit 0.30.13",
 ]
 
 [[package]]

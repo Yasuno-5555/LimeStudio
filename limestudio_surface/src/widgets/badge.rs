@@ -25,7 +25,7 @@ impl SurfaceBadge {
             id: self.id,
             rect: [self.position.x, self.position.y, self.size.x, self.size.y],
             level: self.level,
-            temporal: TemporalStrategy::Standard(0.06),
+            temporal: TemporalStrategy::Standard,
         }]
     }
 }

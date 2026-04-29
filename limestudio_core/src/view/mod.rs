@@ -1,3 +1,4 @@
+pub mod layout;
 use serde::{Serialize, Deserialize};
 use std::collections::{HashMap, HashSet};
 use dirtydata_core::types::StableId;
@@ -12,6 +13,8 @@ pub struct IdBiMap {
     ui_to_kernel: HashMap<UiIndex, (StableId, u32)>,
     /// Kernel ULID -> UI Index
     kernel_to_ui: HashMap<StableId, UiIndex>,
+    /// UUID (LimeGraph) -> Kernel ULID
+    uuid_to_kernel: HashMap<uuid::Uuid, StableId>,
     /// Generation counter for each UI index to detect zombie references.
     generations: HashMap<UiIndex, u32>,
     next_index: UiIndex,
@@ -23,7 +26,7 @@ impl IdBiMap {
     }
 
     /// Register a mapping between a new UI Index and a Kernel ULID.
-    pub fn register(&mut self, kernel_id: StableId) -> UiIndex {
+    pub fn register(&mut self, kernel_id: StableId, uuid: Option<uuid::Uuid>) -> UiIndex {
         let index = self.next_index;
         self.next_index += 1;
         
@@ -33,7 +36,14 @@ impl IdBiMap {
 
         self.ui_to_kernel.insert(index, (kernel_id, current_gen));
         self.kernel_to_ui.insert(kernel_id, index);
+        if let Some(u) = uuid {
+            self.uuid_to_kernel.insert(u, kernel_id);
+        }
         index
+    }
+
+    pub fn resolve_uuid(&self, uuid: uuid::Uuid) -> Option<StableId> {
+        self.uuid_to_kernel.get(&uuid).copied()
     }
 
     /// Resolve a UI Index to a Kernel ULID, verifying the generation.
@@ -151,8 +161,8 @@ mod tests {
         let k1 = StableId::new();
         let k2 = StableId::new();
 
-        let u1 = map.register(k1);
-        let u2 = map.register(k2);
+        let u1 = map.register(k1, None);
+        let u2 = map.register(k2, None);
 
         assert_ne!(u1, u2);
         assert_eq!(map.resolve(u1), Some(k1));
@@ -165,7 +175,7 @@ mod tests {
     fn test_id_bimap_unregistration() {
         let mut map = IdBiMap::new();
         let k1 = StableId::new();
-        let u1 = map.register(k1);
+        let u1 = map.register(k1, None);
 
         map.unregister_by_ui_index(u1);
         assert_eq!(map.resolve(u1), None);
@@ -176,7 +186,7 @@ mod tests {
     fn test_id_bimap_zombie_prevention_simulation() {
         let mut map = IdBiMap::new();
         let k1 = StableId::new();
-        let u1 = map.register(k1);
+        let u1 = map.register(k1, None);
         
         map.unregister_by_ui_index(u1);
         

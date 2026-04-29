@@ -44,7 +44,7 @@ impl SurfaceToggle {
                 id: self.id,
                 rect: [self.position.x - 2.0, self.position.y - 2.0, self.size.x + 4.0, self.size.y + 4.0],
                 color: Color::ACCENT_BLUE.to_array(),
-                temporal: TemporalStrategy::Standard(0.06),
+                temporal: TemporalStrategy::Standard,
             });
         }
         
@@ -64,7 +64,7 @@ impl SurfaceToggle {
             kind: IndicatorKind::Toggle,
             value: if self.is_on { 1.0 } else { 0.0 },
             color: self.colors.active.to_array(),
-            temporal: TemporalStrategy::Standard(0.1),
+            temporal: TemporalStrategy::Standard,
         });
 
         primitives

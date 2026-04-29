@@ -132,7 +132,7 @@ impl SurfaceEngine {
         }
 
         let root_style = Style {
-            size: Size { width: Dimension::Percent(1.0), height: Dimension::Percent(1.0) },
+            size: Size { width: Dimension::Points(1280.0), height: Dimension::Points(720.0) },
             flex_direction: FlexDirection::Row, // Side-by-side
             ..Default::default()
         };
@@ -174,14 +174,11 @@ impl SurfaceEngine {
                 }
                 crate::runtime::interaction_kernel::InteractionIntent::UpdateParameter { node_id: _, parameter, value } => {
                     println!("Surface: Intent -> Update Parameter '{}' to {:.3}", parameter, value);
-                    // TODO: Update in Scene/Authority
                 }
                 crate::runtime::interaction_kernel::InteractionIntent::CompileCode { node_id: _, source } => {
                     println!("Surface: Intent -> Recompiling Node with new source...");
-                    // In real app, this triggers JIT.
-                    // For now, we update the mock provenance to show it "worked".
-                    // (We'd need to map the 'compile:id' back to the node ID)
                 }
+                _ => {}
             }
         }
     }
@@ -206,6 +203,12 @@ impl SurfaceEngine {
                     size: Size { width: Dimension::Percent(1.0), height: Dimension::Auto },
                     ..Default::default()
                 }, &child_nodes).unwrap()
+            }
+            FocusProxy { child, .. } => {
+                self.build_taffy_recursive(child)
+            }
+            Accessibility { child, .. } => {
+                self.build_taffy_recursive(child)
             }
             Knob { .. } | Slider { .. } => {
                 self.taffy.new_leaf(Style {
@@ -317,6 +320,20 @@ impl SurfaceEngine {
         self.widget_geometry.push((*widget.id().unwrap_or(&SurfaceId::generate()), rect));
 
         match widget {
+            FocusProxy { child, id, is_focused } => {
+                self.generate_primitives_from_layout(child, node, primitives, parent_pos);
+                if *is_focused {
+                    primitives.push(SurfacePrimitive::FocusRing {
+                        id: SurfaceId::from_seed(&format!("focus_proxy_{}", id.0.0)),
+                        rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
+                        color: [0.6, 1.0, 0.4, 1.0], // Lime accent
+                        temporal: TemporalStrategy::Fast,
+                    });
+                }
+            }
+            Accessibility { child, .. } => {
+                self.generate_primitives_from_layout(child, node, primitives, parent_pos);
+            }
 
             Column { children } => {
                 let node_children = self.taffy.children(node).unwrap();
@@ -344,7 +361,7 @@ impl SurfaceEngine {
                     rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
                     style: FrameStyle::Standard,
                     color: [0.15, 0.15, 0.15, 1.0],
-                    temporal: TemporalStrategy::Standard(0.06),
+                    temporal: TemporalStrategy::Standard,
                 });
                 primitives.push(SurfacePrimitive::Arc {
                     id: *id,
@@ -354,7 +371,7 @@ impl SurfaceEngine {
                     start_angle: -135.0,
                     end_angle: -135.0 + (value * 270.0),
                     kind: ArcKind::Value,
-                    temporal: TemporalStrategy::Standard(0.06),
+                    temporal: TemporalStrategy::Standard,
                 });
                 primitives.push(SurfacePrimitive::Text {
                     id: *id,
@@ -375,7 +392,7 @@ impl SurfaceEngine {
                     kind: IndicatorKind::Led,
                     value,
                     color: Color::ACCENT_LIME.to_array(),
-                    temporal: TemporalStrategy::Standard(0.06),
+                    temporal: TemporalStrategy::Standard,
                 });
                 primitives.push(SurfacePrimitive::Text {
                     id: *id,
@@ -397,7 +414,7 @@ impl SurfaceEngine {
                     kind: IndicatorKind::Led,
                     value: left,
                     color: [0.0, 1.0, 0.2, 1.0],
-                    temporal: TemporalStrategy::Fluid(0.15),
+                    temporal: TemporalStrategy::Slow,
                 });
                 primitives.push(SurfacePrimitive::Indicator {
                     id: id_stable,
@@ -405,7 +422,7 @@ impl SurfaceEngine {
                     kind: IndicatorKind::Led,
                     value: right,
                     color: [0.0, 1.0, 0.2, 1.0],
-                    temporal: TemporalStrategy::Fluid(0.15),
+                    temporal: TemporalStrategy::Slow,
                 });
             }
             XYPad { id, label, x_signal, y_signal } => {
@@ -422,7 +439,7 @@ impl SurfaceEngine {
                     rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
                     style: FrameStyle::Standard,
                     color: [0.15, 0.15, 0.15, 1.0],
-                    temporal: TemporalStrategy::Standard(0.06),
+                    temporal: TemporalStrategy::Standard,
                 });
                 // Pad Crosshair
                 primitives.push(SurfacePrimitive::Indicator {
@@ -431,7 +448,7 @@ impl SurfaceEngine {
                     kind: IndicatorKind::Led,
                     value: 1.0,
                     color: Color::ACCENT_LIME.to_array(),
-                    temporal: TemporalStrategy::Standard(0.02),
+                    temporal: TemporalStrategy::Standard,
                 });
                 primitives.push(SurfacePrimitive::Text {
                     id: *id,
@@ -464,7 +481,7 @@ impl SurfaceEngine {
                     rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
                     style: FrameStyle::Standard,
                     color: if *is_active { [0.4, 0.4, 0.4, 1.0] } else { [0.3, 0.3, 0.3, 1.0] },
-                    temporal: TemporalStrategy::Standard(0.04),
+                    temporal: TemporalStrategy::Standard,
                 });
                 primitives.push(SurfacePrimitive::Text {
                     id: *id,
@@ -533,7 +550,7 @@ impl SurfaceEngine {
                             kind: crate::ui_ir::CurveKind::Cable, // Hack: use cable kind for now
                             thickness: 1.5,
                             color: [0.0, 1.0, 1.0, 0.8], // Cyan
-                            temporal: TemporalStrategy::Fluid(0.1),
+                            temporal: TemporalStrategy::Slow,
                         });
                     }
                 }
@@ -565,7 +582,7 @@ impl SurfaceEngine {
                             kind: crate::ui_ir::CurveKind::Cable,
                             thickness: 2.0,
                             color: [1.0, 0.2, 0.5, 0.9], // Pink/Magenta for spectrum
-                            temporal: TemporalStrategy::Fluid(0.08),
+                            temporal: TemporalStrategy::Slow,
                         });
                     }
                 }
@@ -591,7 +608,7 @@ impl SurfaceEngine {
                     kind: IndicatorKind::Led,
                     value: cpu_norm,
                     color: [0.75, 1.0, 0.0, 1.0], // Lime
-                    temporal: TemporalStrategy::Fast(0.1),
+                    temporal: TemporalStrategy::Fast,
                 });
 
                 // 3. Status Indicators (CLIP & NaN)
@@ -645,7 +662,7 @@ impl SurfaceEngine {
                             kind: IndicatorKind::Led,
                             value: if is_current { 1.0 } else { 0.3 },
                             color: if is_current { Color::ACCENT_LIME.to_array() } else { [0.5, 0.5, 0.5, 1.0] },
-                            temporal: TemporalStrategy::Standard(0.04),
+                            temporal: TemporalStrategy::Standard,
                         });
                     }
                 }
@@ -719,9 +736,17 @@ impl SurfaceEngine {
                     let state = self.transition_store.entry(*id).or_insert(TransitionState {
                         motion: crate::motion::MotionState::new(*end_angle),
                         target: *end_angle,
-                        strategy: TemporalStrategy::Standard(0.06),
+                        strategy: TemporalStrategy::Standard,
                     });
-                    let current_end = Self::update_transition(state, *end_angle, dt);
+                    let current_end = {
+                    let (stiffness, damping) = match state.strategy {
+                        crate::ui_ir::TemporalStrategy::Fast => (crate::motion::constants::STIFFNESS_FAST, crate::motion::constants::DAMPING_FAST),
+                        crate::ui_ir::TemporalStrategy::Standard => (crate::motion::constants::STIFFNESS_STANDARD, crate::motion::constants::DAMPING_STANDARD),
+                        crate::ui_ir::TemporalStrategy::Slow => (crate::motion::constants::STIFFNESS_SLOW, crate::motion::constants::DAMPING_SLOW),
+                        crate::ui_ir::TemporalStrategy::Instant => (1000000.0, 1000.0),
+                    };
+                    state.motion.update(*end_angle, dt, stiffness, damping)
+                };
                     
                     let half_angle = (current_end - start_angle).to_radians() * 0.5;
                     let sc = glam::Vec2::new(half_angle.sin(), half_angle.cos());
@@ -734,15 +759,19 @@ impl SurfaceEngine {
                         ArcKind::Progress => Color::ACCENT_BLUE,
                     };
 
+                    let size_val = (*radius + *thickness); 
+                    let ra = *radius / size_val;
+                    let rb = (*thickness * 0.5) / size_val;
+
                     instances.push(render::sdf::SdfInstance {
                         position: glam::Vec2::new(p.x, p.y),
-                        size: glam::Vec2::new(*radius + *thickness, *radius + *thickness) * scale,
+                        size: glam::Vec2::splat(size_val * scale),
                         color: color.to_glam_vec4(), 
                         shape_type: 2, 
                         _pad: 0,
                         modulation_depth: 0.0,
                         modulation_current: 0.0,
-                        params: glam::Vec4::new(sc.x, sc.y, *radius * scale, *thickness * 0.5 * scale),
+                        params: glam::Vec4::new(sc.x, sc.y, ra, rb),
                         params2: glam::Vec4::ZERO,
                     });
                 }
@@ -753,7 +782,15 @@ impl SurfaceEngine {
                         strategy: *temporal,
                     });
                     
-                    let current_val = Self::update_transition(state, *value, dt);
+                    let current_val = {
+                    let (stiffness, damping) = match state.strategy {
+                        crate::ui_ir::TemporalStrategy::Fast => (crate::motion::constants::STIFFNESS_FAST, crate::motion::constants::DAMPING_FAST),
+                        crate::ui_ir::TemporalStrategy::Standard => (crate::motion::constants::STIFFNESS_STANDARD, crate::motion::constants::DAMPING_STANDARD),
+                        crate::ui_ir::TemporalStrategy::Slow => (crate::motion::constants::STIFFNESS_SLOW, crate::motion::constants::DAMPING_SLOW),
+                        crate::ui_ir::TemporalStrategy::Instant => (1000000.0, 1000.0),
+                    };
+                    state.motion.update(*value, dt, stiffness, damping)
+                };
                     let size = glam::Vec2::new(rect[2] * 0.5, rect[3] * 0.5);
                     let p = transform.transform_point3(glam::vec3(rect[0] + size.x, rect[1] + size.y, 0.0));
 
@@ -781,7 +818,15 @@ impl SurfaceEngine {
                         strategy: *temporal,
                     });
                     
-                    let activity = Self::update_transition(state, 1.0, dt);
+                    let activity = {
+                    let (stiffness, damping) = match state.strategy {
+                        crate::ui_ir::TemporalStrategy::Fast => (crate::motion::constants::STIFFNESS_FAST, crate::motion::constants::DAMPING_FAST),
+                        crate::ui_ir::TemporalStrategy::Standard => (crate::motion::constants::STIFFNESS_STANDARD, crate::motion::constants::DAMPING_STANDARD),
+                        crate::ui_ir::TemporalStrategy::Slow => (crate::motion::constants::STIFFNESS_SLOW, crate::motion::constants::DAMPING_SLOW),
+                        crate::ui_ir::TemporalStrategy::Instant => (1000000.0, 1000.0),
+                    };
+                    state.motion.update(1.0, dt, stiffness, damping)
+                };
                     let size = glam::Vec2::new(rect[2] * 0.5, rect[3] * 0.5);
                     let p = transform.transform_point3(glam::vec3(rect[0] + size.x, rect[1] + size.y, 0.0));
 
@@ -837,7 +882,15 @@ impl SurfaceEngine {
                         strategy: *temporal,
                     });
                     
-                    let activity = Self::update_transition(state, 1.0, dt);
+                    let activity = {
+                    let (stiffness, damping) = match state.strategy {
+                        crate::ui_ir::TemporalStrategy::Fast => (crate::motion::constants::STIFFNESS_FAST, crate::motion::constants::DAMPING_FAST),
+                        crate::ui_ir::TemporalStrategy::Standard => (crate::motion::constants::STIFFNESS_STANDARD, crate::motion::constants::DAMPING_STANDARD),
+                        crate::ui_ir::TemporalStrategy::Slow => (crate::motion::constants::STIFFNESS_SLOW, crate::motion::constants::DAMPING_SLOW),
+                        crate::ui_ir::TemporalStrategy::Instant => (1000000.0, 1000.0),
+                    };
+                    state.motion.update(1.0, dt, stiffness, damping)
+                };
                     let size = glam::Vec2::new(rect[2] * 0.5, rect[3] * 0.5);
                     let p = transform.transform_point3(glam::vec3(rect[0] + size.x, rect[1] + size.y, 0.0));
 
@@ -880,25 +933,7 @@ impl SurfaceEngine {
         }
     }
 
-    fn update_transition(state: &mut TransitionState, target: f32, dt: f32) -> f32 {
-        use crate::motion::constants::*;
-        match state.strategy {
-            TemporalStrategy::Instant => {
-                state.motion.value = target;
-                state.motion.velocity = 0.0;
-                target
-            }
-            _ => {
-                let stiffness = match state.strategy {
-                    TemporalStrategy::Fast(_) => STIFFNESS_FAST,
-                    TemporalStrategy::Standard(_) => STIFFNESS_NORMAL,
-                    TemporalStrategy::Fluid(_) => STIFFNESS_SLOW,
-                    _ => STIFFNESS_NORMAL,
-                };
-                state.motion.update(target, dt, stiffness)
-            }
-        }
-    }
+    
 
     fn offset_primitive(prim: &mut crate::ui_ir::SurfacePrimitive, offset: glam::Vec2) {
         use crate::ui_ir::SurfacePrimitive::*;

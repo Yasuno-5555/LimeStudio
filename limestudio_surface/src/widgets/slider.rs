@@ -53,7 +53,7 @@ impl ParamSlider {
                 id: self.id,
                 rect: [self.position.x - 4.0, self.position.y - 4.0, self.size.x + 8.0, self.size.y + 8.0],
                 color: Color::ACCENT_BLUE.to_array(),
-                temporal: TemporalStrategy::Standard(0.06),
+                temporal: TemporalStrategy::Standard,
             });
         }
         
@@ -80,7 +80,7 @@ impl ParamSlider {
             kind: IndicatorKind::Led, // Using Led kind as a solid block here
             value: val,
             color: self.colors.accent.to_array(),
-            temporal: TemporalStrategy::Standard(0.06),
+            temporal: TemporalStrategy::Standard,
         });
 
         // 3. Handle (Indicator - Radio style)
@@ -96,7 +96,7 @@ impl ParamSlider {
             kind: IndicatorKind::Radio,
             value: 1.0,
             color: self.colors.handle.to_array(),
-            temporal: TemporalStrategy::Standard(0.06),
+            temporal: TemporalStrategy::Standard,
         });
 
         primitives

@@ -50,7 +50,7 @@ impl SurfaceDropDown {
                 id: self.id,
                 rect: [self.position.x - 2.0, self.position.y - 2.0, self.size.x + 4.0, self.size.y + 4.0],
                 color: Color::ACCENT_BLUE.to_array(),
-                temporal: TemporalStrategy::Standard(0.06),
+                temporal: TemporalStrategy::Standard,
             });
         }
         
@@ -81,7 +81,7 @@ impl SurfaceDropDown {
             kind: IndicatorKind::Radio, // Using radio as a circle placeholder for arrow
             value: if self.is_open { 1.0 } else { 0.0 },
             color: self.colors.highlight.to_array(),
-            temporal: TemporalStrategy::Standard(0.06),
+            temporal: TemporalStrategy::Standard,
         });
 
         // 4. Open List (Overlay)
@@ -92,7 +92,7 @@ impl SurfaceDropDown {
                 rect: [self.position.x, self.position.y + self.size.y, self.size.x, list_height],
                 style: FrameStyle::Standard,
                 color: Color::BG_DEEP.to_array(),
-                temporal: TemporalStrategy::Standard(0.1),
+                temporal: TemporalStrategy::Standard,
             });
         }
 

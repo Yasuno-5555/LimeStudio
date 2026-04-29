@@ -25,6 +25,12 @@ pub enum EngineResponse {
         message: String,
         trace_id: Option<ulid::Ulid>,
     },
+    /// テレメトリ・因果関係データ
+    Telemetry {
+        cpu_load: f32,
+        causality_events: Vec<crate::causality::PolyphonicCausality>,
+        node_cpu: std::collections::HashMap<dirtydata_core::StableId, f32>,
+    },
 }
 
 pub struct UiToEnginePipeline {

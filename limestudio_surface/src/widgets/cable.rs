@@ -60,7 +60,7 @@ impl SemanticCable {
             kind,
             thickness,
             color: color.to_array(),
-            temporal: TemporalStrategy::Fast(0.02),
+            temporal: TemporalStrategy::Fast,
         }]
     }
 }
