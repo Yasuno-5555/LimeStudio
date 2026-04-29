@@ -180,6 +180,7 @@ impl SqueezerApp {
 
         let top_bar = SurfaceWidget::Box {
             style: FrameStyle::Standard,
+            layout_style: std::boxed::Box::new(taffy::style::Style::default()),
             children: vec![SurfaceWidget::Row {
                 children: vec![
                     SurfaceWidget::Label {
@@ -268,6 +269,7 @@ impl SqueezerApp {
 
         let project_tree = SurfaceWidget::Box {
             style: FrameStyle::Standard,
+            layout_style: std::boxed::Box::new(taffy::style::Style::default()),
             children: vec![SurfaceWidget::TreeView {
                 id: SurfaceId::from_seed("project_tree_root"),
                 nodes: vec![
@@ -306,6 +308,7 @@ impl SqueezerApp {
             } else {
                 FrameStyle::None
             },
+            layout_style: std::boxed::Box::new(taffy::style::Style::default()),
             children: vec![if self.is_design_mode {
                 self.designer.build_ui()
             } else {

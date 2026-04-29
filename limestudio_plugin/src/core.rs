@@ -193,7 +193,7 @@ impl<T: LimeProcessor + Default + Send + 'static> Plugin for LimeAdapter<T> {
         let obs_consumer = self.obs_consumer.lock().unwrap().take();
         Some(Box::new(SurfaceEditor::new(
             params,
-            move |params_captured, _obs| {
+            move |params_captured, _obs, _ctx| {
                 let mut obs_lock = obs_cons_shared.lock().unwrap();
                 let cons = obs_lock.take().unwrap_or_else(|| {
                     let (_, cons) = crate::observation::create_pipeline(512);

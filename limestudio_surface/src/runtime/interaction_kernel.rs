@@ -31,6 +31,10 @@ pub enum InteractionIntent {
         parameter: String,
         value: f32,
     },
+    ContextClick {
+        id: SurfaceId,
+        position: glam::Vec2,
+    },
     CompileCode {
         node_id: SurfaceId,
         source: String,
@@ -98,7 +102,7 @@ impl InteractionKernel {
         camera: &InfiniteCamera,
         nodes: &[(SurfaceId, Rect)],
         ports: &[(SurfaceId, Circle)],
-        widgets: &[(SurfaceId, Rect)],
+        widgets: &[(SurfaceId, Rect, crate::ui_ir::InteractionClass)],
     ) -> Vec<InteractionIntent> {
         match event {
             SurfaceEvent::PointerDown {
@@ -109,34 +113,44 @@ impl InteractionKernel {
                 let world_pos = camera.screen_to_world(*position);
                 self.last_world_pos = world_pos;
 
-                // 0. Widgets (Highest Priority)
-                if let Some(id) = HitTester::hit_test_nodes(widgets, world_pos) {
-                    let rect = widgets.iter().find(|(rid, _)| rid == &id).unwrap().1;
+                // 0. Widgets (Highest Priority) - Bubbling Support
+                let hits = HitTester::hit_test_all_nodes_v2(widgets, world_pos);
+                for id in hits {
+                    let (_, rect, class) = widgets.iter().find(|(rid, _, _)| rid == &id).unwrap();
                     let local_pos = world_pos - rect.min();
 
-                    // TODO: Improve widget type identification.
-                    // For now, let's assume widgets with specific ID patterns are knobs.
-                    // We'll use a hacky check for demonstration.
-                    if id.0 .0.to_string().contains("knob") {
-                        self.session = DragSession::KnobDragging {
-                            id,
-                            parameter: "unnamed".to_string(), // In real app, extract from ID
-                            origin_y: world_pos.y,
-                            base_value: 0.5, // Current value from signal
-                        };
-                        return vec![];
+                    match class {
+                        crate::ui_ir::InteractionClass::Knob => {
+                            self.session = DragSession::KnobDragging {
+                                id,
+                                parameter: "unnamed".to_string(),
+                                origin_y: world_pos.y,
+                                base_value: 0.5,
+                            };
+                            return vec![];
+                        }
+                        crate::ui_ir::InteractionClass::Slider => {
+                            // TODO: Add slider dragging session
+                            return vec![];
+                        }
+                        crate::ui_ir::InteractionClass::Button => {
+                            // For now, simple clicks are handled as Seek if it's a history bar,
+                            // but here we should probably emit a Click intent.
+                            if id.0 .0.to_string().contains("compile") {
+                                return vec![InteractionIntent::CompileCode {
+                                    node_id: id,
+                                    source: "// Edited Code...".to_string(),
+                                }];
+                            }
+                            let progress = (local_pos.x / rect.size.x).clamp(0.0, 1.0);
+                            return vec![InteractionIntent::SeekHistory { progress }];
+                        }
+                        crate::ui_ir::InteractionClass::Draggable => {
+                            // Generic draggable (e.g. Scroll)
+                            continue; // Bubbling: let child or other sibling handle it if more specific
+                        }
+                        _ => {}
                     }
-
-                    if id.0 .0.to_string().contains("compile") {
-                        return vec![InteractionIntent::CompileCode {
-                            node_id: id, // In real app, extract actual node ID
-                            source: "// Edited Code...".to_string(),
-                        }];
-                    }
-
-                    let progress = (local_pos.x / rect.size.x).clamp(0.0, 1.0);
-
-                    return vec![InteractionIntent::SeekHistory { progress }];
                 }
 
                 // 1. Ports -> 2. Nodes -> 3. Empty Canvas
@@ -150,6 +164,21 @@ impl InteractionKernel {
                     };
 
                 self.handle_down(world_pos, hit_result, modifiers.shift)
+            }
+            SurfaceEvent::PointerDown {
+                position,
+                button: MouseButton::Right,
+                ..
+            } => {
+                let world_pos = camera.screen_to_world(*position);
+                let hits = HitTester::hit_test_all_nodes_v2(widgets, world_pos);
+                for id in hits {
+                    return vec![InteractionIntent::ContextClick {
+                        id,
+                        position: world_pos,
+                    }];
+                }
+                vec![]
             }
             SurfaceEvent::PointerMove { position, .. } => {
                 let world_pos = camera.screen_to_world(*position);
@@ -169,7 +198,7 @@ impl InteractionKernel {
         &mut self,
         key: crate::runtime::input::Key,
         modifiers: &crate::runtime::input::Modifiers,
-        widgets: &[(SurfaceId, Rect)],
+        widgets: &[(SurfaceId, Rect, crate::ui_ir::InteractionClass)],
     ) -> Vec<InteractionIntent> {
         use crate::runtime::input::Key;
         let mut intents = Vec::new();
@@ -183,7 +212,7 @@ impl InteractionKernel {
                 // HIG 5.3: Tab navigation
                 let current_idx = self
                     .focused_id
-                    .and_then(|id| widgets.iter().position(|(wid, _)| wid == &id));
+                    .and_then(|id| widgets.iter().position(|(wid, _, _)| wid == &id));
 
                 let next_idx = if modifiers.shift {
                     // Shift+Tab: Previous

@@ -102,6 +102,7 @@ impl MirrorApp {
             children: vec![
                 Box {
                     style: limestudio_surface::ui_ir::FrameStyle::Standard,
+                    layout_style: std::boxed::Box::new(taffy::style::Style::default()),
                     children: vec![
                         Label {
                             text: "LIME SURFACE MIRROR".to_string(),

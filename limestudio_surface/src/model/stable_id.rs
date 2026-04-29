@@ -5,6 +5,11 @@ use serde::{Deserialize, Serialize};
 /// This helps in tracking nodes, ports, and cables between UI frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SurfaceId(pub StableId);
+impl std::fmt::Display for SurfaceId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl From<StableId> for SurfaceId {
     fn from(id: StableId) -> Self {

@@ -22,3 +22,4 @@ tracing-subscriber = { workspace = true }
 log = { workspace = true }
 rtrb = { workspace = true }
 toml = { workspace = true }
+taffy = { workspace = true }

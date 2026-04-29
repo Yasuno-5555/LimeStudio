@@ -26,6 +26,31 @@ impl HitTester {
         None
     }
 
+    pub fn hit_test_nodes_v2(
+        nodes: &[(SurfaceId, Rect, crate::ui_ir::InteractionClass)],
+        point: Vec2,
+    ) -> Option<SurfaceId> {
+        for (id, rect, _) in nodes.iter().rev() {
+            if rect.contains(point) {
+                return Some(*id);
+            }
+        }
+        None
+    }
+
+    pub fn hit_test_all_nodes_v2(
+        nodes: &[(SurfaceId, Rect, crate::ui_ir::InteractionClass)],
+        point: Vec2,
+    ) -> Vec<SurfaceId> {
+        let mut hits = Vec::new();
+        for (id, rect, _) in nodes.iter().rev() {
+            if rect.contains(point) {
+                hits.push(*id);
+            }
+        }
+        hits
+    }
+
     /// Find a port at the given world position with a specific snap radius.
     pub fn hit_test_ports(
         ports: &[(SurfaceId, Circle)],

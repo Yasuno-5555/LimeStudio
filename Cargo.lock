@@ -4562,6 +4562,7 @@ dependencies = [
  "rtrb",
  "serde",
  "serde_json",
+ "taffy",
  "ulid",
  "wgpu",
 ]
@@ -4611,6 +4612,7 @@ dependencies = [
  "limestudio_surface",
  "pollster",
  "serde",
+ "taffy",
  "tokio",
  "ulid",
  "wgpu",
@@ -7407,6 +7409,7 @@ dependencies = [
  "rtrb",
  "serde",
  "serde_json",
+ "taffy",
  "toml 0.7.8",
  "tracing-subscriber",
  "ulid",

@@ -38,6 +38,19 @@ pub enum SemanticRole {
     Canvas,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum InteractionClass {
+    None,
+    Knob,
+    Slider,
+    Button,
+    XYPad,
+    Toggle,
+    Draggable,
+    Clickable,
+    Custom(String),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SurfaceWidget {
     DataTable {
@@ -49,20 +62,21 @@ pub enum SurfaceWidget {
         id: SurfaceId,
         nodes: Vec<TreeNode>,
     },
-    Column {
-        children: Vec<SurfaceWidget>,
-    },
     Terminal {
         id: SurfaceId,
         history: Vec<String>,
         current_input: String,
     },
-    Row {
-        children: Vec<SurfaceWidget>,
-    },
     Box {
         children: Vec<SurfaceWidget>,
         style: FrameStyle,
+        layout_style: Box<taffy::style::Style>,
+    },
+    Column {
+        children: Vec<SurfaceWidget>,
+    },
+    Row {
+        children: Vec<SurfaceWidget>,
     },
     Button {
         id: SurfaceId,
@@ -112,6 +126,7 @@ pub enum SurfaceWidget {
         id: SurfaceId,
         style: Box<taffy::style::Style>,
         primitives: Vec<SurfacePrimitive>,
+        interaction: InteractionClass,
     },
     /// Low-level Semantic Primitive Stream
     PrimitiveStream {
@@ -125,6 +140,25 @@ pub enum SurfaceWidget {
         id: SurfaceId,
         snapshots: Vec<String>,
         current_idx: usize,
+    },
+    /// Memo: Skip rebuilding sub-tree if hash is identical.
+    Memo {
+        id: SurfaceId,
+        hash: u64,
+        child: Box<SurfaceWidget>,
+    },
+    /// Layer: Explicit Z-index grouping.
+    Layer {
+        id: SurfaceId,
+        level: i32,
+        child: Box<SurfaceWidget>,
+    },
+    /// Scroll: Clipping and overflow container.
+    Scroll {
+        id: SurfaceId,
+        child: Box<SurfaceWidget>,
+        scroll_pos: [f32; 2],
+        show_bars: bool,
     },
     /// Focused: Special wrapper or state for focusing.
     /// In Lime, focus is a first-class citizen.
@@ -153,7 +187,22 @@ impl SurfaceWidget {
             Self::Custom { id, .. } => Some(id),
             Self::ForensicMonitor { id, .. } => Some(id),
             Self::Timeline { id, .. } => Some(id),
+            Self::Memo { id, .. } => Some(id),
+            Self::Layer { id, .. } => Some(id),
+            Self::Scroll { id, .. } => Some(id),
             _ => None,
+        }
+    }
+    pub fn interaction_class(&self) -> InteractionClass {
+        match self {
+            Self::Knob { .. } => InteractionClass::Knob,
+            Self::Slider { .. } => InteractionClass::Slider,
+            Self::Button { .. } => InteractionClass::Button,
+            Self::XYPad { .. } => InteractionClass::XYPad,
+            Self::Scroll { .. } => InteractionClass::Draggable,
+            Self::Custom { interaction, .. } => interaction.clone(),
+            Self::Terminal { id: _, .. } => InteractionClass::Custom("terminal".to_string()),
+            _ => InteractionClass::None,
         }
     }
 }
@@ -393,6 +442,8 @@ pub enum OverlapLaw {
     SemanticOcclusion,
     /// Boolean Intersection: Overlap creates a third solid state (Lightness shift).
     BooleanIntersection,
+    /// Inside: Clipping mode where only children inside the parent are shown.
+    Inside,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

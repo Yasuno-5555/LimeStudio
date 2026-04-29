@@ -1,5 +1,4 @@
-use crate::color::Color;
-use crate::ui_ir::{DisplaySignal, FrameStyle, SurfaceId, SurfaceWidget, TreeNode};
+use crate::ui_ir::{DisplaySignal, SurfaceId, SurfaceWidget, TreeNode};
 use dirtydata_dsp_fft::{FftProcessor, WindowType};
 use glam::Vec2;
 
@@ -182,8 +181,15 @@ impl AuthorityDrawer {
             ],
         });
 
-        Box {
+        SurfaceWidget::Box {
             style: crate::ui_ir::FrameStyle::AuthorityGlass,
+            layout_style: std::boxed::Box::new(taffy::style::Style {
+                size: taffy::prelude::Size {
+                    width: taffy::prelude::Dimension::Points(400.0),
+                    height: taffy::prelude::Dimension::Percent(1.0),
+                },
+                ..Default::default()
+            }),
             children: vec![Column { children }],
         }
     }

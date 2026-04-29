@@ -534,6 +534,10 @@ pub mod ui {
             WidgetIR::Box {
                 children: vec![self.child.build()],
                 style: limestudio_surface::ui_ir::FrameStyle::None,
+                layout_style: Box::new(taffy::style::Style {
+                    padding: taffy::prelude::Rect::points(self.amount),
+                    ..Default::default()
+                }),
             }
         }
     }
@@ -558,10 +562,14 @@ pub mod ui {
 
     impl Widget for Spacer {
         fn build(&self) -> WidgetIR {
-            // Spacer is just an empty box with flex
+            // Spacer is an empty box with flex
             WidgetIR::Box {
                 children: Vec::new(),
                 style: limestudio_surface::ui_ir::FrameStyle::None,
+                layout_style: Box::new(taffy::style::Style {
+                    flex_grow: self.flex,
+                    ..Default::default()
+                }),
             }
         }
     }
@@ -578,8 +586,18 @@ pub mod ui {
 
     impl<'a> Widget for Column<'a> {
         fn build(&self) -> WidgetIR {
-            WidgetIR::Column {
+            WidgetIR::Box {
                 children: self.children.iter().map(|c| c.build()).collect(),
+                style: limestudio_surface::ui_ir::FrameStyle::None,
+                layout_style: Box::new(taffy::style::Style {
+                    display: taffy::style::Display::Flex,
+                    flex_direction: taffy::style::FlexDirection::Column,
+                    size: taffy::prelude::Size {
+                        width: taffy::prelude::Dimension::Percent(1.0),
+                        height: taffy::prelude::Dimension::Auto,
+                    },
+                    ..Default::default()
+                }),
             }
         }
     }
@@ -596,8 +614,18 @@ pub mod ui {
 
     impl<'a> Widget for Row<'a> {
         fn build(&self) -> WidgetIR {
-            WidgetIR::Row {
+            WidgetIR::Box {
                 children: self.children.iter().map(|c| c.build()).collect(),
+                style: limestudio_surface::ui_ir::FrameStyle::None,
+                layout_style: Box::new(taffy::style::Style {
+                    display: taffy::style::Display::Flex,
+                    flex_direction: taffy::style::FlexDirection::Row,
+                    size: taffy::prelude::Size {
+                        width: taffy::prelude::Dimension::Percent(1.0),
+                        height: taffy::prelude::Dimension::Auto,
+                    },
+                    ..Default::default()
+                }),
             }
         }
     }
@@ -607,17 +635,80 @@ pub mod ui {
             f.debug_struct("Row").finish()
         }
     }
+
+    pub struct Custom {
+        pub id: String,
+        pub primitives: Vec<limestudio_surface::ui_ir::SurfacePrimitive>,
+        pub interaction: limestudio_surface::ui_ir::InteractionClass,
+    }
+
+    impl Custom {
+        pub fn new(id: &str) -> Self {
+            Self {
+                id: id.to_string(),
+                primitives: Vec::new(),
+                interaction: limestudio_surface::ui_ir::InteractionClass::None,
+            }
+        }
+        pub fn primitives(mut self, primitives: Vec<limestudio_surface::ui_ir::SurfacePrimitive>) -> Self {
+            self.primitives = primitives;
+            self
+        }
+        pub fn interaction(mut self, interaction: limestudio_surface::ui_ir::InteractionClass) -> Self {
+            self.interaction = interaction;
+            self
+        }
+    }
+
+    impl Widget for Custom {
+        fn build(&self) -> WidgetIR {
+            WidgetIR::Custom {
+                id: SurfaceId::from_seed(&self.id),
+                style: Box::new(taffy::style::Style::default()),
+                primitives: self.primitives.clone(),
+                interaction: self.interaction.clone(),
+            }
+        }
+    }
+
+    impl std::fmt::Debug for Custom {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("Custom").field("id", &self.id).finish()
+        }
+    }
 }
 
 pub mod crash;
 pub mod editor;
 pub mod interaction;
 
+/// Context for the UI build process, providing access to local state.
+pub struct UiContext<'a> {
+    pub(crate) state_store: &'a mut std::collections::HashMap<ui::SurfaceId, Box<dyn std::any::Any + Send>>,
+}
+
+impl<'a> UiContext<'a> {
+    /// Retrieve or initialize local state for a widget.
+    pub fn use_state<T: Clone + Send + 'static>(&mut self, id: ui::SurfaceId, default: impl FnOnce() -> T) -> T {
+        self.state_store
+            .entry(id)
+            .or_insert_with(|| Box::new(default()))
+            .downcast_ref::<T>()
+            .cloned()
+            .unwrap()
+    }
+
+    /// Update local state for a widget.
+    pub fn set_state<T: Send + 'static>(&mut self, id: ui::SurfaceId, value: T) {
+        self.state_store.insert(id, Box::new(value));
+    }
+}
+
 // Re-exports
 pub use editor::ObservationState;
 pub use ui::{
-    Badge, Button, Envelope, Knob, Label, Lens, LevelMeter, ListView, NumberBox, Slider, Toggle,
-    UiParam, Waveform,
+    Badge, Button, Column, Custom, Envelope, Knob, Label, Lens, LevelMeter, ListView, NumberBox,
+    Row, Slider, Toggle, UiParam, Waveform,
 };
 
 #[macro_export]

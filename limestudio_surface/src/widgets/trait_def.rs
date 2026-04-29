@@ -30,6 +30,7 @@ where
             id: self.id,
             style: Box::new((self.style)()),
             primitives: (self.build_primitives)(),
+            interaction: crate::ui_ir::InteractionClass::None,
         }
     }
 }

@@ -84,11 +84,13 @@ impl Designer {
 
         let canvas = Box {
             style: FrameStyle::Standard,
+            layout_style: std::boxed::Box::new(taffy::style::Style::default()),
             children: self.widgets.iter().map(|w| w.to_widget()).collect(),
         };
 
         let param_list = Box {
             style: FrameStyle::Message,
+            layout_style: std::boxed::Box::new(taffy::style::Style::default()),
             children: self
                 .available_params
                 .iter()

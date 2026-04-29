@@ -63,7 +63,10 @@ pub struct SurfaceEngine {
     // Geometry Cache for Hit Testing
     pub node_geometry: Vec<(SurfaceId, model::geometry::Rect)>,
     pub port_geometry: Vec<(SurfaceId, model::geometry::Circle)>,
-    pub widget_geometry: Vec<(SurfaceId, model::geometry::Rect)>,
+    pub widget_geometry: Vec<(SurfaceId, model::geometry::Rect, crate::ui_ir::InteractionClass)>,
+    pub pending_intents: Vec<crate::runtime::interaction_kernel::InteractionIntent>,
+    pub theme: model::theme::SurfaceTheme,
+    pub debug_inspector: bool,
 }
 
 impl Default for SurfaceEngine {
@@ -109,6 +112,9 @@ impl SurfaceEngine {
             node_geometry: Vec::new(),
             port_geometry: Vec::new(),
             widget_geometry: Vec::new(),
+            pending_intents: Vec::new(),
+            theme: model::theme::SurfaceTheme::default(),
+            debug_inspector: false,
         }
     }
 
@@ -167,11 +173,14 @@ impl SurfaceEngine {
             )
             .unwrap();
 
+        self.widget_geometry.clear();
+        self.node_geometry.clear();
+        self.port_geometry.clear();
+
         let mut primitives = Vec::new();
-        self.generate_primitives_from_layout(tree, main_view, &mut primitives, glam::Vec2::ZERO);
+        self.generate_primitives_from_layout(tree, main_view, &mut primitives, glam::Vec2::ZERO, 0);
 
         if let Some(dw) = drawer_widget {
-            // We need to find the drawer_node again or store it
             let node_children = self.taffy.children(container).unwrap();
             if node_children.len() > 1 {
                 self.generate_primitives_from_layout(
@@ -179,7 +188,21 @@ impl SurfaceEngine {
                     node_children[1],
                     &mut primitives,
                     glam::Vec2::ZERO,
+                    100, // Drawer is always on top
                 );
+            }
+        }
+
+        // 5. Debug Inspector Overlay
+        if self.debug_inspector {
+            for (_, rect, _) in &self.widget_geometry {
+                primitives.push(SurfacePrimitive::Frame {
+                    id: SurfaceId::generate(),
+                    rect: [rect.min().x, rect.min().y, rect.size.x, rect.size.y],
+                    style: crate::ui_ir::FrameStyle::None,
+                    color: [1.0, 0.0, 1.0, 0.2], // Semi-transparent magenta
+                    temporal: TemporalStrategy::Instant,
+                });
             }
         }
 
@@ -191,39 +214,20 @@ impl SurfaceEngine {
         intents: Vec<crate::runtime::interaction_kernel::InteractionIntent>,
     ) {
         for intent in intents {
-            match intent {
-                crate::runtime::interaction_kernel::InteractionIntent::Connect { from, to } => {
-                    println!("Surface: Intent -> Connect {:?} to {:?}", from, to);
-                }
-                crate::runtime::interaction_kernel::InteractionIntent::SeekHistory { progress } => {
-                    println!("Surface: Intent -> Seek History to {}%", progress * 100.0);
-                    self.time_travel.seek_normalized(progress);
-                }
+            // Internal processing
+            match &intent {
                 crate::runtime::interaction_kernel::InteractionIntent::Select { ids } => {
-                    self.selections = ids.into_iter().collect();
-                }
-                crate::runtime::interaction_kernel::InteractionIntent::MoveNode { id, delta } => {
-                    println!("Surface: Intent -> Move Node {:?} by {:?}", id, delta);
-                }
-                crate::runtime::interaction_kernel::InteractionIntent::UpdateParameter {
-                    node_id: _,
-                    parameter,
-                    value,
-                } => {
-                    println!(
-                        "Surface: Intent -> Update Parameter '{}' to {:.3}",
-                        parameter, value
-                    );
-                }
-                crate::runtime::interaction_kernel::InteractionIntent::CompileCode {
-                    node_id: _,
-                    source,
-                } => {
-                    println!("Surface: Intent -> Recompiling Node with new source...");
+                    self.selections = ids.iter().cloned().collect();
                 }
                 _ => {}
             }
+            // Push to public queue for host/plugin to observe
+            self.pending_intents.push(intent);
         }
+    }
+
+    pub fn take_intents(&mut self) -> Vec<crate::runtime::interaction_kernel::InteractionIntent> {
+        std::mem::take(&mut self.pending_intents)
     }
 
     fn build_taffy_recursive(&mut self, widget: &crate::ui_ir::SurfaceWidget) -> Node {
@@ -311,21 +315,13 @@ impl SurfaceEngine {
                     ..Default::default()
                 })
                 .unwrap(),
-            Box { children, .. } => {
+            Box { children, layout_style, .. } => {
                 let children_nodes: Vec<_> = children
                     .iter()
                     .map(|c| self.build_taffy_recursive(c))
                     .collect();
                 self.taffy
-                    .new_with_children(
-                        Style {
-                            display: Display::Flex,
-                            flex_direction: FlexDirection::Column,
-                            padding: Rect::points(8.0),
-                            ..Default::default()
-                        },
-                        &children_nodes,
-                    )
+                    .new_with_children(*layout_style.clone(), &children_nodes)
                     .unwrap()
             }
             Button { .. } => self
@@ -414,7 +410,37 @@ impl SurfaceEngine {
                     ..Default::default()
                 })
                 .unwrap(),
-
+            Scroll { child, .. } => {
+                let child_node = self.build_taffy_recursive(child);
+                self.taffy
+                    .new_with_children(
+                        Style {
+                            size: Size {
+                                width: Dimension::Percent(1.0),
+                                height: Dimension::Percent(1.0),
+                            },
+                            ..Default::default()
+                        },
+                        &[child_node],
+                    )
+                    .unwrap()
+            }
+            Layer { child, .. } | Memo { child, .. } => {
+                let child_node = self.build_taffy_recursive(child);
+                self.taffy
+                    .new_with_children(
+                        Style {
+                            display: Display::Flex,
+                            size: Size {
+                                width: Dimension::Percent(1.0),
+                                height: Dimension::Percent(1.0),
+                            },
+                            ..Default::default()
+                        },
+                        &[child_node],
+                    )
+                    .unwrap()
+            }
             _ => self.taffy.new_leaf(Style::default()).unwrap(),
         }
     }
@@ -425,6 +451,7 @@ impl SurfaceEngine {
         node: Node,
         primitives: &mut Vec<SurfacePrimitive>,
         parent_pos: glam::Vec2,
+        level: i32,
     ) {
         let layout = self.taffy.layout(node).unwrap();
         // The Law of Lime (8px Grid & Sub-pixel Rounding)
@@ -436,16 +463,16 @@ impl SurfaceEngine {
         use crate::ui_ir::SurfaceWidget::*;
 
         // Populate Widget Geometry for generic interaction
-        self.widget_geometry
-            .push((*widget.id().unwrap_or(&SurfaceId::generate()), rect));
+        self.widget_geometry.push((
+            *widget.id().unwrap_or(&SurfaceId::generate()),
+            rect,
+            widget.interaction_class(),
+        ));
 
         match widget {
-            FocusProxy {
-                child,
-                id,
-                is_focused,
-            } => {
-                self.generate_primitives_from_layout(child, node, primitives, parent_pos);
+            FocusProxy { id, child, is_focused, .. } => {
+                let node_child = self.taffy.children(node).unwrap()[0];
+                self.generate_primitives_from_layout(child, node_child, primitives, pos, level);
                 if *is_focused {
                     primitives.push(SurfacePrimitive::FocusRing {
                         id: SurfaceId::from_seed(&format!("focus_proxy_{}", id.0 .0)),
@@ -456,35 +483,51 @@ impl SurfaceEngine {
                 }
             }
             Accessibility { child, .. } => {
-                self.generate_primitives_from_layout(child, node, primitives, parent_pos);
+                let node_child = self.taffy.children(node).unwrap()[0];
+                self.generate_primitives_from_layout(child, node_child, primitives, pos, level);
             }
 
-            Column { children } => {
-                let node_children = self.taffy.children(node).unwrap();
-                for (i, child) in children.iter().enumerate() {
-                    if i < node_children.len() {
-                        self.generate_primitives_from_layout(
-                            child,
-                            node_children[i],
-                            primitives,
-                            pos,
-                        );
-                    }
-                }
+            Scroll {
+                child, scroll_pos, ..
+            } => {
+                let node_child = self.taffy.children(node).unwrap()[0];
+                let mut child_primitives = Vec::new();
+                self.generate_primitives_from_layout(
+                    child,
+                    node_child,
+                    &mut child_primitives,
+                    pos - glam::Vec2::new(scroll_pos[0], scroll_pos[1]),
+                    level,
+                );
+
+                primitives.push(SurfacePrimitive::ClipMask {
+                    id: SurfaceId::generate(),
+                    rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
+                    law: crate::ui_ir::OverlapLaw::Inside,
+                    children: child_primitives,
+                });
             }
-            Row { children } => {
-                let node_children = self.taffy.children(node).unwrap();
-                for (i, child) in children.iter().enumerate() {
-                    if i < node_children.len() {
-                        self.generate_primitives_from_layout(
-                            child,
-                            node_children[i],
-                            primitives,
-                            pos,
-                        );
-                    }
-                }
+            Layer { level: layer_level, child, .. } => {
+                let node_child = self.taffy.children(node).unwrap()[0];
+                self.generate_primitives_from_layout(
+                    child,
+                    node_child,
+                    primitives,
+                    pos,
+                    level + layer_level,
+                );
             }
+            Memo { child, .. } => {
+                let node_child = self.taffy.children(node).unwrap()[0];
+                self.generate_primitives_from_layout(
+                    child,
+                    node_child,
+                    primitives,
+                    pos,
+                    level,
+                );
+            }
+
             Knob { id, label, signal } => {
                 let value = match signal {
                     DisplaySignal::Linear(v) => *v,
@@ -612,7 +655,11 @@ impl SurfaceEngine {
                     color: [0.8, 0.8, 0.8, 1.0],
                 });
             }
-            Box { children, style } => {
+            Box {
+                children,
+                style,
+                layout_style: _,
+            } => {
                 primitives.push(SurfacePrimitive::Frame {
                     id: SurfaceId::generate(),
                     rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
@@ -633,6 +680,7 @@ impl SurfaceEngine {
                             node_children[i],
                             primitives,
                             pos,
+                            level,
                         );
                     }
                 }
@@ -725,17 +773,17 @@ impl SurfaceEngine {
                 // 2. Data Segments
                 if data.len() > 1 {
                     let step = size.x / (data.len() - 1) as f32;
-                    let centerY = rounded_pos.y + size.y * 0.5;
-                    let scaleY = size.y * 0.4;
+                    let center_y = rounded_pos.y + size.y * 0.5;
+                    let scale_y = size.y * 0.4;
 
                     for i in 0..(data.len() - 1) {
                         primitives.push(SurfacePrimitive::Curve {
                             id: id_stable,
                             control_points: vec![
-                                [rounded_pos.x + i as f32 * step, centerY - data[i] * scaleY],
+                                [rounded_pos.x + i as f32 * step, center_y - data[i] * scale_y],
                                 [
                                     rounded_pos.x + (i + 1) as f32 * step,
-                                    centerY - data[i + 1] * scaleY,
+                                    center_y - data[i + 1] * scale_y,
                                 ],
                             ],
                             kind: crate::ui_ir::CurveKind::Cable, // Hack: use cable kind for now
@@ -760,17 +808,17 @@ impl SurfaceEngine {
                 // 2. Spectrum Bars/Line
                 if data.len() > 1 {
                     let step = size.x / (data.len() - 1) as f32;
-                    let bottomY = rounded_pos.y + size.y;
-                    let scaleY = size.y * 0.9;
+                    let bottom_y = rounded_pos.y + size.y;
+                    let scale_y = size.y * 0.9;
 
                     for i in 0..(data.len() - 1) {
                         primitives.push(SurfacePrimitive::Curve {
                             id: id_stable,
                             control_points: vec![
-                                [rounded_pos.x + i as f32 * step, bottomY - data[i] * scaleY],
+                                [rounded_pos.x + i as f32 * step, bottom_y - data[i] * scale_y],
                                 [
                                     rounded_pos.x + (i + 1) as f32 * step,
-                                    bottomY - data[i + 1] * scaleY,
+                                    bottom_y - data[i + 1] * scale_y,
                                 ],
                             ],
                             kind: crate::ui_ir::CurveKind::Cable,
@@ -1009,7 +1057,7 @@ impl SurfaceEngine {
                         ArcKind::Progress => Color::ACCENT_BLUE,
                     };
 
-                    let size_val = (*radius + *thickness);
+                    let size_val = *radius + *thickness;
                     let ra = *radius / size_val;
                     let rb = (*thickness * 0.5) / size_val;
 

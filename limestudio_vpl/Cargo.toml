@@ -20,6 +20,7 @@ limestudio_surface = { path = "../limestudio_surface" }
 anyhow.workspace = true
 serde.workspace = true
 ulid.workspace = true
+taffy.workspace = true
 wgpu.workspace = true
 glam.workspace = true
 bytemuck.workspace = true

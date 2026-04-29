@@ -53,10 +53,25 @@ static SHARED_WGPU: Lazy<Option<Arc<SharedWgpu>>> = Lazy::new(|| {
 });
 
 /// UI側で保持する「Realityの観測結果」
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct ObservationState {
     pub peak_left: f32,
     pub peak_right: f32,
+    pub waveform: [f32; crate::observation::WAVEFORM_SAMPLES],
+    pub spectrum: [f32; crate::observation::SPECTRUM_BINS],
+    pub cpu_usage: f32,
+}
+
+impl Default for ObservationState {
+    fn default() -> Self {
+        Self {
+            peak_left: 0.0,
+            peak_right: 0.0,
+            waveform: [0.0; crate::observation::WAVEFORM_SAMPLES],
+            spectrum: [0.0; crate::observation::SPECTRUM_BINS],
+            cpu_usage: 0.0,
+        }
+    }
 }
 
 pub struct SurfaceEditor<P, F> {
@@ -70,7 +85,7 @@ pub struct SurfaceEditor<P, F> {
 impl<P, F> SurfaceEditor<P, F>
 where
     P: Params + 'static,
-    F: for<'a> Fn(&'a P, &'a ObservationState) -> Box<dyn Widget + 'a>
+    F: for<'a> Fn(&'a P, &'a ObservationState, &mut crate::UiContext) -> Box<dyn Widget + 'a>
         + Send
         + Sync
         + Clone
@@ -102,7 +117,7 @@ struct EditorInstance {
 impl<P, F> Editor for SurfaceEditor<P, F>
 where
     P: Params + 'static,
-    F: for<'a> Fn(&'a P, &'a ObservationState) -> Box<dyn Widget + 'a>
+    F: for<'a> Fn(&'a P, &'a ObservationState, &mut crate::UiContext) -> Box<dyn Widget + 'a>
         + Send
         + Sync
         + Clone
@@ -132,7 +147,7 @@ where
         let width = self.width;
         let height = self.height;
 
-        let (mut _event_tx, mut event_rx) = RingBuffer::<InteractionEvent>::new(1024);
+        let (mut event_tx, mut event_rx) = RingBuffer::<InteractionEvent>::new(1024);
         let interaction_store = Arc::new(InteractionStore::new());
         let param_map: HashMap<String, ParamPtr> = params
             .param_map()
@@ -238,6 +253,8 @@ where
         let is_alive_thread = is_alive.clone();
         let shared_wgpu = wgpu.clone();
         let mut obs_state = ObservationState::default();
+        let mut seq_id_counter = 0u64;
+        let mut local_state = std::collections::HashMap::new();
 
         std::thread::spawn(move || {
             let mut last_t = Instant::now();
@@ -249,21 +266,56 @@ where
                 // 1. Drain Observation Vascular System
                 if let Some(obs) = &mut obs_consumer {
                     for event in obs.drain() {
-                        if let ObservationEvent::Peak { left, right } = event {
-                            obs_state.peak_left = left;
-                            obs_state.peak_right = right;
+                        match event {
+                            ObservationEvent::Peak { left, right } => {
+                                obs_state.peak_left = left;
+                                obs_state.peak_right = right;
+                            }
+                            ObservationEvent::Waveform(data) => {
+                                obs_state.waveform = data;
+                            }
+                            ObservationEvent::Spectrum(data) => {
+                                obs_state.spectrum = data;
+                            }
+                            ObservationEvent::PerfStats { cpu_usage, .. } => {
+                                obs_state.cpu_usage = cpu_usage;
+                            }
+                            _ => {}
                         }
                     }
                 }
 
-                // 2. Projection (incorporating ObservationState)
-                let tree = (ui_build)(&params, &obs_state);
+                // 2. Projection (incorporating ObservationState & LocalState)
+                let mut ctx = crate::UiContext {
+                    state_store: &mut local_state,
+                };
+                let tree = (ui_build)(&params, &obs_state, &mut ctx);
                 let ir = tree.build();
 
                 // 3. Reconciliation & Render
                 if let Ok(mut engine) = engine.lock() {
                     engine.sync_ui(&ir);
                     let instances = engine.generate_instances();
+
+                    // 4. Intent Bridge (Closure of the loop)
+                    // In a real scenario, events would be fed from the OS thread via WaitFreeEventBridge.
+                    // Here we simulate the feed by checking for any intents generated during interaction.
+                    let intents = engine.take_intents();
+                    
+                    for intent in intents {
+                        match intent {
+                            limestudio_surface::runtime::interaction_kernel::InteractionIntent::UpdateParameter { parameter: _, value, node_id } => {
+                                let param_id = node_id.to_string();
+                                interaction_store.set_value(&param_id, value);
+                                seq_id_counter += 1;
+                                let _ = event_tx.push(InteractionEvent::Drag {
+                                    param_id,
+                                    seq_id: seq_id_counter,
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
 
                     if let Ok(output) = surface.get_current_texture() {
                         let view = output

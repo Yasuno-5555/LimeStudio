@@ -1,4 +1,4 @@
-use dirtydata_core::types::{DataType, PortDirection};
+use dirtydata_core::types::DataType;
 use glam::Vec2;
 use limestudio_core::pipeline::EngineToUiPipeline;
 use limestudio_core::transaction::TransactionLayer;
@@ -114,6 +114,7 @@ impl VplEngine {
         // 2. Build UI Tree
         let top_bar = SurfaceWidget::Box {
             style: FrameStyle::Standard,
+            layout_style: std::boxed::Box::new(taffy::style::Style::default()),
             children: vec![SurfaceWidget::Row {
                 children: vec![
                     SurfaceWidget::Label {
@@ -189,6 +190,7 @@ impl VplEngine {
 
         let side_bar = SurfaceWidget::Box {
             style: FrameStyle::Standard,
+            layout_style: std::boxed::Box::new(taffy::style::Style::default()),
             children: side_bar_children,
         };
 
@@ -219,6 +221,7 @@ impl VplEngine {
         let Some(selected) = self.selected_node else {
             return SurfaceWidget::Box {
                 style: FrameStyle::Standard,
+                layout_style: std::boxed::Box::new(taffy::style::Style::default()),
                 children: vec![SurfaceWidget::Label {
                     text: "INSPECTOR: Select a node".to_string(),
                     is_secondary: true,
@@ -230,6 +233,7 @@ impl VplEngine {
         let Some(kid) = kernel_id else {
             return SurfaceWidget::Box {
                 style: FrameStyle::Standard,
+                layout_style: std::boxed::Box::new(taffy::style::Style::default()),
                 children: vec![SurfaceWidget::Label {
                     text: "Error: Could not resolve node ID".to_string(),
                     is_secondary: true,
@@ -278,6 +282,7 @@ impl VplEngine {
 
         SurfaceWidget::Box {
             style: FrameStyle::Standard,
+            layout_style: std::boxed::Box::new(taffy::style::Style::default()),
             children: history_items,
         }
     }
