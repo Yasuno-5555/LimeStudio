@@ -1,22 +1,22 @@
-pub use nih_plug;
-pub use rtrb;
 pub use dirtydata_core;
 pub use limestudio_macro::plugin;
-pub mod dsl;
-pub mod safety;
-pub mod observation;
+pub use nih_plug;
+pub use rtrb;
 pub mod core;
+pub mod dsl;
+pub mod observation;
+pub mod safety;
 
-pub use limestudio_surface::widgets::trait_def::Widget;
 pub use limestudio_surface::ui_ir::SurfaceWidget as WidgetIR;
+pub use limestudio_surface::widgets::trait_def::Widget;
 
-pub use crate::core::{LimeProcessor, LimeAdapter};
+pub use crate::core::{LimeAdapter, LimeProcessor};
 
 // UI Components - Strictly Structure Only (Pure Projection)
 pub mod ui {
-    use nih_plug::prelude::*;
-    pub use limestudio_surface::ui_ir::{SurfaceWidget as WidgetIR, SurfaceId, DisplaySignal};
+    pub use limestudio_surface::ui_ir::{DisplaySignal, SurfaceId, SurfaceWidget as WidgetIR};
     pub use limestudio_surface::widgets::trait_def::Widget;
+    use nih_plug::prelude::*;
 
     /// A reference to a parameter in the UI projection.
     pub struct UiParam<'a> {
@@ -60,7 +60,7 @@ pub mod ui {
             }
         }
     }
-    
+
     impl<'a> std::fmt::Debug for Knob<'a> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.debug_struct("Knob").field("label", &self.label).finish()
@@ -115,7 +115,10 @@ pub mod ui {
 
     impl<'a> std::fmt::Debug for Slider<'a> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("Slider").field("label", &self.label).field("is_vertical", &self.is_vertical).finish()
+            f.debug_struct("Slider")
+                .field("label", &self.label)
+                .field("is_vertical", &self.is_vertical)
+                .finish()
         }
     }
 
@@ -126,7 +129,10 @@ pub mod ui {
 
     impl<'a> Toggle<'a> {
         pub fn new(ui_param: UiParam<'a>) -> Self {
-            Self { ui_param, label: String::new() }
+            Self {
+                ui_param,
+                label: String::new(),
+            }
         }
         pub fn label(mut self, label: &str) -> Self {
             self.label = label.to_string();
@@ -153,7 +159,9 @@ pub mod ui {
 
     impl<'a> std::fmt::Debug for Toggle<'a> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("Toggle").field("label", &self.label).finish()
+            f.debug_struct("Toggle")
+                .field("label", &self.label)
+                .finish()
         }
     }
 
@@ -164,7 +172,10 @@ pub mod ui {
 
     impl<'a> NumberBox<'a> {
         pub fn new(ui_param: UiParam<'a>) -> Self {
-            Self { ui_param, label: String::new() }
+            Self {
+                ui_param,
+                label: String::new(),
+            }
         }
         pub fn label(mut self, label: &str) -> Self {
             self.label = label.to_string();
@@ -172,7 +183,11 @@ pub mod ui {
         }
         pub fn build(self) -> WidgetIR {
             WidgetIR::Label {
-                text: format!("{}: {:.2}", self.label, self.ui_param.param.unmodulated_plain_value()),
+                text: format!(
+                    "{}: {:.2}",
+                    self.label,
+                    self.ui_param.param.unmodulated_plain_value()
+                ),
                 is_secondary: false,
             }
         }
@@ -181,7 +196,11 @@ pub mod ui {
     impl<'a> Widget for NumberBox<'a> {
         fn build(&self) -> WidgetIR {
             WidgetIR::Label {
-                text: format!("{}: {:.2}", self.label, self.ui_param.param.unmodulated_plain_value()),
+                text: format!(
+                    "{}: {:.2}",
+                    self.label,
+                    self.ui_param.param.unmodulated_plain_value()
+                ),
                 is_secondary: false,
             }
         }
@@ -189,7 +208,9 @@ pub mod ui {
 
     impl<'a> std::fmt::Debug for NumberBox<'a> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("NumberBox").field("label", &self.label).finish()
+            f.debug_struct("NumberBox")
+                .field("label", &self.label)
+                .finish()
         }
     }
 
@@ -200,26 +221,37 @@ pub mod ui {
 
     impl Button {
         pub fn new(id: &str) -> Self {
-            Self { _id: id.to_string(), label: id.to_string() }
+            Self {
+                _id: id.to_string(),
+                label: id.to_string(),
+            }
         }
         pub fn label(mut self, label: &str) -> Self {
             self.label = label.to_string();
             self
         }
         pub fn build(self) -> WidgetIR {
-            WidgetIR::Label { text: format!("[ {} ]", self.label), is_secondary: false }
+            WidgetIR::Label {
+                text: format!("[ {} ]", self.label),
+                is_secondary: false,
+            }
         }
     }
 
     impl Widget for Button {
         fn build(&self) -> WidgetIR {
-            WidgetIR::Label { text: format!("[ {} ]", self.label), is_secondary: false }
+            WidgetIR::Label {
+                text: format!("[ {} ]", self.label),
+                is_secondary: false,
+            }
         }
     }
 
     impl std::fmt::Debug for Button {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("Button").field("label", &self.label).finish()
+            f.debug_struct("Button")
+                .field("label", &self.label)
+                .finish()
         }
     }
 
@@ -230,20 +262,29 @@ pub mod ui {
 
     impl Label {
         pub fn new(text: &str) -> Self {
-            Self { text: text.to_string(), is_secondary: false }
+            Self {
+                text: text.to_string(),
+                is_secondary: false,
+            }
         }
         pub fn secondary(mut self) -> Self {
             self.is_secondary = true;
             self
         }
         pub fn build(self) -> WidgetIR {
-            WidgetIR::Label { text: self.text, is_secondary: self.is_secondary }
+            WidgetIR::Label {
+                text: self.text,
+                is_secondary: self.is_secondary,
+            }
         }
     }
 
     impl Widget for Label {
         fn build(&self) -> WidgetIR {
-            WidgetIR::Label { text: self.text.clone(), is_secondary: self.is_secondary }
+            WidgetIR::Label {
+                text: self.text.clone(),
+                is_secondary: self.is_secondary,
+            }
         }
     }
 
@@ -259,16 +300,24 @@ pub mod ui {
 
     impl Badge {
         pub fn new(text: &str) -> Self {
-            Self { text: text.to_string() }
+            Self {
+                text: text.to_string(),
+            }
         }
         pub fn build(self) -> WidgetIR {
-            WidgetIR::Label { text: format!("({})", self.text), is_secondary: true }
+            WidgetIR::Label {
+                text: format!("({})", self.text),
+                is_secondary: true,
+            }
         }
     }
 
     impl Widget for Badge {
         fn build(&self) -> WidgetIR {
-            WidgetIR::Label { text: format!("({})", self.text), is_secondary: true }
+            WidgetIR::Label {
+                text: format!("({})", self.text),
+                is_secondary: true,
+            }
         }
     }
 
@@ -286,7 +335,11 @@ pub mod ui {
 
     impl ListView {
         pub fn new(id: &str) -> Self {
-            Self { _id: id.to_string(), items: Vec::new(), selected_index: None }
+            Self {
+                _id: id.to_string(),
+                items: Vec::new(),
+                selected_index: None,
+            }
         }
         pub fn items(mut self, items: Vec<String>) -> Self {
             self.items = items;
@@ -297,19 +350,27 @@ pub mod ui {
             self
         }
         pub fn build(self) -> WidgetIR {
-            WidgetIR::Label { text: format!("List: {:?}", self.items), is_secondary: false }
+            WidgetIR::Label {
+                text: format!("List: {:?}", self.items),
+                is_secondary: false,
+            }
         }
     }
 
     impl Widget for ListView {
         fn build(&self) -> WidgetIR {
-            WidgetIR::Label { text: format!("List: {:?}", self.items), is_secondary: false }
+            WidgetIR::Label {
+                text: format!("List: {:?}", self.items),
+                is_secondary: false,
+            }
         }
     }
 
     impl std::fmt::Debug for ListView {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("ListView").field("items", &self.items).finish()
+            f.debug_struct("ListView")
+                .field("items", &self.items)
+                .finish()
         }
     }
 
@@ -322,13 +383,19 @@ pub mod ui {
             Self { id: id.to_string() }
         }
         pub fn build(self) -> WidgetIR {
-            WidgetIR::Label { text: format!("Envelope: {}", self.id), is_secondary: false }
+            WidgetIR::Label {
+                text: format!("Envelope: {}", self.id),
+                is_secondary: false,
+            }
         }
     }
 
     impl Widget for Envelope {
         fn build(&self) -> WidgetIR {
-            WidgetIR::Label { text: format!("Envelope: {}", self.id), is_secondary: false }
+            WidgetIR::Label {
+                text: format!("Envelope: {}", self.id),
+                is_secondary: false,
+            }
         }
     }
 
@@ -345,22 +412,34 @@ pub mod ui {
 
     impl Lens {
         pub fn new(id: &str, kind: &str) -> Self {
-            Self { id: id.to_string(), kind: kind.to_string() }
+            Self {
+                id: id.to_string(),
+                kind: kind.to_string(),
+            }
         }
         pub fn build(self) -> WidgetIR {
-            WidgetIR::Label { text: format!("Lens: {} ({})", self.id, self.kind), is_secondary: true }
+            WidgetIR::Label {
+                text: format!("Lens: {} ({})", self.id, self.kind),
+                is_secondary: true,
+            }
         }
     }
 
     impl Widget for Lens {
         fn build(&self) -> WidgetIR {
-            WidgetIR::Label { text: format!("Lens: {} ({})", self.id, self.kind), is_secondary: true }
+            WidgetIR::Label {
+                text: format!("Lens: {} ({})", self.id, self.kind),
+                is_secondary: true,
+            }
         }
     }
 
     impl std::fmt::Debug for Lens {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("Lens").field("id", &self.id).field("kind", &self.kind).finish()
+            f.debug_struct("Lens")
+                .field("id", &self.id)
+                .field("kind", &self.kind)
+                .finish()
         }
     }
 
@@ -371,19 +450,25 @@ pub mod ui {
 
     impl LevelMeter {
         pub fn new(id: &str, value: f32, peak: f32) -> Self {
-            Self { 
-                id: id.to_string(), 
-                signal: DisplaySignal::Meter { value, peak } 
+            Self {
+                id: id.to_string(),
+                signal: DisplaySignal::Meter { value, peak },
             }
         }
         pub fn build(self) -> WidgetIR {
-            WidgetIR::LevelMeter { id: self.id, signal: self.signal }
+            WidgetIR::LevelMeter {
+                id: self.id,
+                signal: self.signal,
+            }
         }
     }
 
     impl Widget for LevelMeter {
         fn build(&self) -> WidgetIR {
-            WidgetIR::LevelMeter { id: self.id.clone(), signal: self.signal.clone() }
+            WidgetIR::LevelMeter {
+                id: self.id.clone(),
+                signal: self.signal.clone(),
+            }
         }
     }
 
@@ -400,16 +485,25 @@ pub mod ui {
 
     impl Waveform {
         pub fn new(id: &str, data: Vec<f32>) -> Self {
-            Self { id: id.to_string(), data }
+            Self {
+                id: id.to_string(),
+                data,
+            }
         }
         pub fn build(self) -> WidgetIR {
-            WidgetIR::Waveform { id: self.id, data: self.data.clone() }
+            WidgetIR::Waveform {
+                id: self.id,
+                data: self.data.clone(),
+            }
         }
     }
 
     impl Widget for Waveform {
         fn build(&self) -> WidgetIR {
-            WidgetIR::Waveform { id: self.id.clone(), data: self.data.clone() }
+            WidgetIR::Waveform {
+                id: self.id.clone(),
+                data: self.data.clone(),
+            }
         }
     }
 
@@ -428,7 +522,10 @@ pub mod ui {
 
     impl Padding {
         pub fn new(amount: f32, child: impl Widget + 'static) -> Self {
-            Self { amount, child: Box::new(child) }
+            Self {
+                amount,
+                child: Box::new(child),
+            }
         }
     }
 
@@ -443,7 +540,9 @@ pub mod ui {
 
     impl std::fmt::Debug for Padding {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("Padding").field("amount", &self.amount).finish()
+            f.debug_struct("Padding")
+                .field("amount", &self.amount)
+                .finish()
         }
     }
 
@@ -510,13 +609,16 @@ pub mod ui {
     }
 }
 
+pub mod crash;
 pub mod editor;
 pub mod interaction;
-pub mod crash;
 
 // Re-exports
-pub use ui::{Knob, Slider, Toggle, NumberBox, Button, ListView, Envelope, Lens, Label, Badge, UiParam, LevelMeter, Waveform};
 pub use editor::ObservationState;
+pub use ui::{
+    Badge, Button, Envelope, Knob, Label, Lens, LevelMeter, ListView, NumberBox, Slider, Toggle,
+    UiParam, Waveform,
+};
 
 #[macro_export]
 macro_rules! vbox {

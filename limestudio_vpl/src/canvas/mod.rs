@@ -1,5 +1,5 @@
-pub mod renderer;
 pub mod interaction;
+pub mod renderer;
 
-pub use renderer::CanvasRenderer;
 pub use interaction::CanvasState;
+pub use renderer::CanvasRenderer;

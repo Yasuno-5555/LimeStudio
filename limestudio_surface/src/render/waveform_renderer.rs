@@ -1,5 +1,5 @@
-use wgpu::*;
 use glam::{Vec2, Vec4};
+use wgpu::*;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -35,16 +35,14 @@ impl WaveformRenderer {
                 module: &shader,
                 entry_point: "vs_main",
                 compilation_options: Default::default(),
-                buffers: &[
-                    VertexBufferLayout {
-                        array_stride: std::mem::size_of::<WaveformPoint>() as BufferAddress,
-                        step_mode: VertexStepMode::Vertex,
-                        attributes: &vertex_attr_array![
-                            0 => Float32x2, // position
-                            1 => Float32x4, // color
-                        ],
-                    },
-                ],
+                buffers: &[VertexBufferLayout {
+                    array_stride: std::mem::size_of::<WaveformPoint>() as BufferAddress,
+                    step_mode: VertexStepMode::Vertex,
+                    attributes: &vertex_attr_array![
+                        0 => Float32x2, // position
+                        1 => Float32x4, // color
+                    ],
+                }],
             },
             fragment: Some(FragmentState {
                 module: &shader,
@@ -82,7 +80,9 @@ impl WaveformRenderer {
     }
 
     pub fn draw<'a>(&'a self, rpass: &mut RenderPass<'a>, points: &[WaveformPoint]) {
-        if points.is_empty() { return; }
+        if points.is_empty() {
+            return;
+        }
         rpass.set_pipeline(&self.pipeline);
         rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         rpass.draw(0..points.len() as u32, 0..1);

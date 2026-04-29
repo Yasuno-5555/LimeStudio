@@ -1,5 +1,5 @@
 //! Lime Surface Input Abstraction
-//! 
+//!
 //! Never bind directly to winit. Use normalized events.
 
 use glam::Vec2;
@@ -88,7 +88,11 @@ impl InteractionState {
 
     pub fn handle_event(&mut self, event: &SurfaceEvent) {
         match event {
-            SurfaceEvent::PointerDown { position, button: MouseButton::Left, .. } => {
+            SurfaceEvent::PointerDown {
+                position,
+                button: MouseButton::Left,
+                ..
+            } => {
                 self.drag_origin = Some(*position);
                 self.accumulated_delta = Vec2::ZERO;
                 self.is_dragging = false;
@@ -97,7 +101,7 @@ impl InteractionState {
                 if let Some(origin) = self.drag_origin {
                     let delta = *position - origin;
                     self.accumulated_delta = delta;
-                    
+
                     if !self.is_dragging && delta.length() >= self.threshold {
                         self.is_dragging = true;
                     }
@@ -129,7 +133,7 @@ pub struct TimedEvent {
 }
 
 /// Wait-Free Event Bridge (The Airbag)
-/// 
+///
 /// OSスレッド(Producer)とLime UIスレッド(Consumer)を、
 /// 非ブロッキングかつセマンティックな圧縮を伴って橋渡しする。
 pub struct WaitFreeEventBridge {
@@ -153,7 +157,10 @@ impl WaitFreeEventBridge {
             timestamp: std::sync::atomic::AtomicU64::new(0),
         });
         (
-            Self { discrete_queue: p, latest_move: move_state.clone() },
+            Self {
+                discrete_queue: p,
+                latest_move: move_state.clone(),
+            },
             c,
             move_state,
         )
@@ -173,12 +180,21 @@ impl WaitFreeEventBridge {
                 let x = position.x.to_bits();
                 let y = position.y.to_bits();
                 let packed = (x as u64) << 32 | (y as u64);
-                
-                self.latest_move.packed.store(packed, std::sync::atomic::Ordering::Release);
-                self.latest_move.timestamp.store(timestamp.elapsed().as_micros() as u64, std::sync::atomic::Ordering::Release);
-                
+
+                self.latest_move
+                    .packed
+                    .store(packed, std::sync::atomic::Ordering::Release);
+                self.latest_move.timestamp.store(
+                    timestamp.elapsed().as_micros() as u64,
+                    std::sync::atomic::Ordering::Release,
+                );
+
                 // Moveもキューに積むが、満杯なら捨てる（最新値が atomic にあるため）
-                let _ = self.discrete_queue.push(TimedEvent { event, timestamp, priority });
+                let _ = self.discrete_queue.push(TimedEvent {
+                    event,
+                    timestamp,
+                    priority,
+                });
             }
             _ => {
                 // Discrete Track: 満杯の場合は古いMoveイベントを探して捨てるなどのパージ戦略が必要。
@@ -186,7 +202,11 @@ impl WaitFreeEventBridge {
                 if self.discrete_queue.is_full() {
                     // TODO: 緊急パージロジックの実装（古いPointerMoveを捨てる）
                 }
-                let _ = self.discrete_queue.push(TimedEvent { event, timestamp, priority });
+                let _ = self.discrete_queue.push(TimedEvent {
+                    event,
+                    timestamp,
+                    priority,
+                });
             }
         }
     }

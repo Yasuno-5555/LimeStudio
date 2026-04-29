@@ -1,7 +1,7 @@
 //! Confidence Visualization — "Shape over Color".
 
+use crate::ui_ir::{SurfaceId, SurfacePrimitive, TemporalStrategy};
 use dirtydata_core::types::ConfidenceScore;
-use crate::ui_ir::{SurfacePrimitive, TemporalStrategy, SurfaceId};
 use glam::Vec2;
 
 pub struct ConfidenceVisualizer {

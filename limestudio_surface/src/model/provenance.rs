@@ -1,9 +1,9 @@
 //! Trust Ledger — The Accountability Record.
-//! 
+//!
 //! "Badge は証拠の提示であり、Ledger は証拠の履歴である。"
 
-use serde::{Serialize, Deserialize};
 use crate::ui_ir::ProvenanceLevel;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrustLedger {
@@ -21,14 +21,25 @@ pub struct LedgerEntry {
 }
 
 impl Default for TrustLedger {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl TrustLedger {
     pub fn new() -> Self {
-        Self { entries: Vec::new() }
+        Self {
+            entries: Vec::new(),
+        }
     }
 
-    pub fn record(&mut self, author: &str, why: &str, hash: [u8; 32], prev: ProvenanceLevel, next: ProvenanceLevel) {
+    pub fn record(
+        &mut self,
+        author: &str,
+        why: &str,
+        hash: [u8; 32],
+        prev: ProvenanceLevel,
+        next: ProvenanceLevel,
+    ) {
         self.entries.push(LedgerEntry {
             timestamp: std::time::SystemTime::now(),
             author: author.to_string(),
@@ -41,7 +52,8 @@ impl TrustLedger {
 
     /// 検証可能性の要約を生成
     pub fn summarize_downgrades(&self) -> Vec<&LedgerEntry> {
-        self.entries.iter()
+        self.entries
+            .iter()
             .filter(|e| self.is_downgrade(e.previous_level, e.new_level))
             .collect()
     }

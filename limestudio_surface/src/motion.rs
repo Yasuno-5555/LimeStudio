@@ -1,6 +1,6 @@
 //! Lime Surface Motion System
-//! 
-//! Linear Lerp is Forbidden. 
+//!
+//! Linear Lerp is Forbidden.
 //! Use critically damped spring motion for all UI interactions.
 
 #[derive(Debug, Clone, Copy)]
@@ -20,27 +20,23 @@ impl MotionState {
     /// Critically damped spring update (Implicit Euler for stability)
     /// stiffness: 弾性 (Higher = faster response)
     /// delta_time: 経過時間
-    pub fn update(
-        &mut self,
-        target: f32,
-        delta_time: f32,
-        stiffness: f32,
-        damping: f32,
-    ) -> f32 {
-        if delta_time <= 0.0 { return self.value; }
-        
+    pub fn update(&mut self, target: f32, delta_time: f32, stiffness: f32, damping: f32) -> f32 {
+        if delta_time <= 0.0 {
+            return self.value;
+        }
+
         let h = delta_time;
         let x_diff = self.value - target;
-        
+
         // v_{n+1} = v_n + h * (-k * x_{n+1} - c * v_{n+1})
         // x_{n+1} = x_n + h * v_{n+1}
         // Solving for v_{n+1}:
         // v_{n+1} (1 + h*c + h*h*k) = v_n - h*k*x_n
-        
+
         let det = 1.0 + h * damping + h * h * stiffness;
         let new_v = (self.velocity - h * stiffness * x_diff) / det;
         let new_x = self.value + h * new_v;
-        
+
         self.velocity = new_v;
         self.value = new_x;
         self.value

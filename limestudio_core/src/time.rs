@@ -1,5 +1,5 @@
 //! LimeTime: Lightweight, deterministic time tracking for forensic audio.
-//! 
+//!
 //! "Time is a dimension, not a sequence of strings."
 
 use serde::{Deserialize, Serialize};

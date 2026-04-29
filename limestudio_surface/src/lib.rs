@@ -1,22 +1,24 @@
-pub mod authority;
-pub mod model;
-pub mod render;
 pub mod adapter;
-pub mod scene;
-pub mod runtime;
-pub mod motion;
+pub mod authority;
 pub mod color;
-pub mod widgets;
-pub mod profiler;
 pub mod host_attach;
+pub mod model;
+pub mod motion;
+pub mod profiler;
+pub mod render;
+pub mod runtime;
+pub mod scene;
 pub mod ui_ir;
+pub mod widgets;
 
+use crate::color::Color;
 use crate::model::stable_id::SurfaceId;
-use crate::ui_ir::{SurfacePrimitive, TemporalStrategy, FrameStyle, ArcKind, IndicatorKind, DisplaySignal};
+use crate::ui_ir::{
+    ArcKind, DisplaySignal, FrameStyle, IndicatorKind, SurfacePrimitive, TemporalStrategy,
+};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use crate::color::Color;
 use taffy::prelude::*;
 use taffy::style::Dimension;
 
@@ -31,7 +33,7 @@ pub struct LinkAnalysisState {
     pub last_value: f32,
     pub is_top_k: bool,
     pub last_rank: u32,
-    pub echo_timer: f32, 
+    pub echo_timer: f32,
 }
 
 /// The Core Surface Engine (V7 Semantic Architecture)
@@ -40,14 +42,14 @@ pub struct SurfaceEngine {
     pub input: runtime::interaction_kernel::InteractionKernel,
     pub camera: scene::camera::InfiniteCamera,
     pub profiler: profiler::FrameProfiler,
-    
+
     // V3-V7 Architecture: Asynchronous Perception
     pub primitive_stream: Arc<Mutex<Vec<SurfacePrimitive>>>,
     pub transition_store: HashMap<SurfaceId, TransitionState>,
     pub selections: std::collections::HashSet<SurfaceId>,
     pub causality_states: HashMap<SurfaceId, LinkAnalysisState>,
     pub last_frame_time: Instant,
-    
+
     // Authority Layer
     pub visible_compiler: authority::visible_compiler::VisibleCompilerRegistry,
     pub authority_drawer: widgets::authority_drawer::AuthorityDrawer,
@@ -57,26 +59,31 @@ pub struct SurfaceEngine {
 
     // Layout Engine (Taffy)
     pub taffy: Taffy,
-    
+
     // Geometry Cache for Hit Testing
     pub node_geometry: Vec<(SurfaceId, model::geometry::Rect)>,
     pub port_geometry: Vec<(SurfaceId, model::geometry::Circle)>,
     pub widget_geometry: Vec<(SurfaceId, model::geometry::Rect)>,
 }
 
-
 impl Default for SurfaceEngine {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SurfaceEngine {
     pub fn new() -> Self {
         let mut visible_compiler = authority::visible_compiler::VisibleCompilerRegistry::new();
         let mock_id = SurfaceId::generate(); // We'd need a way to reference actual nodes
-        visible_compiler.provenance.insert(mock_id, authority::visible_compiler::CodeFragment {
-            source: "fn dsp_process(in: f32) -> f32 {\n    in * 0.5 // Accountable Logic\n}".to_string(),
-            language: "rust".to_string(),
-        });
+        visible_compiler.provenance.insert(
+            mock_id,
+            authority::visible_compiler::CodeFragment {
+                source: "fn dsp_process(in: f32) -> f32 {\n    in * 0.5 // Accountable Logic\n}"
+                    .to_string(),
+                language: "rust".to_string(),
+            },
+        );
 
         Self {
             scene: scene::flat_scene::SurfaceScene::new(),
@@ -89,10 +96,10 @@ impl SurfaceEngine {
             causality_states: HashMap::new(),
             last_frame_time: Instant::now(),
             visible_compiler,
-            
+
             authority_drawer: widgets::authority_drawer::AuthorityDrawer::new(
-                SurfaceId::generate(), 
-                glam::Vec2::new(1280.0, 720.0)
+                SurfaceId::generate(),
+                glam::Vec2::new(1280.0, 720.0),
             ),
             time_travel: authority::time_travel::TimeTravelEngine::new(64),
             causal_replay: authority::causal_replay::CausalReplayEngine::new(3.0),
@@ -111,7 +118,7 @@ impl SurfaceEngine {
         self.node_geometry.clear();
         self.port_geometry.clear();
         self.widget_geometry.clear();
-        
+
         let main_view = self.build_taffy_recursive(tree);
         let mut root_children = vec![main_view];
 
@@ -120,11 +127,16 @@ impl SurfaceEngine {
         if let Some(selected_id) = self.selections.iter().next() {
             let snapshot = self.time_travel.get_current_state();
             // Convert SurfaceId (wraps StableId) to StableId for lookup
-            let stable_id = dirtydata_core::types::StableId(selected_id.0.0);
+            let stable_id = dirtydata_core::types::StableId(selected_id.0 .0);
             let node_state = snapshot.and_then(|s| s.node_states.get(&stable_id));
             let code_fragment = self.visible_compiler.get_fragment(*selected_id);
-            
-            let dw = self.authority_drawer.build_widget(*selected_id, "Selected Node", node_state, code_fragment);
+
+            let dw = self.authority_drawer.build_widget(
+                *selected_id,
+                "Selected Node",
+                node_state,
+                code_fragment,
+            );
 
             let drawer_node = self.build_taffy_recursive(&dw);
             root_children.push(drawer_node);
@@ -132,31 +144,52 @@ impl SurfaceEngine {
         }
 
         let root_style = Style {
-            size: Size { width: Dimension::Points(1280.0), height: Dimension::Points(720.0) },
+            size: Size {
+                width: Dimension::Points(1280.0),
+                height: Dimension::Points(720.0),
+            },
             flex_direction: FlexDirection::Row, // Side-by-side
             ..Default::default()
         };
-        let container = self.taffy.new_with_children(root_style, &root_children).unwrap();
+        let container = self
+            .taffy
+            .new_with_children(root_style, &root_children)
+            .unwrap();
 
         // 1280x720 を論理的な基準としてレイアウト計算
-        self.taffy.compute_layout(container, Size { width: AvailableSpace::Definite(1280.0), height: AvailableSpace::Definite(720.0) }).unwrap();
+        self.taffy
+            .compute_layout(
+                container,
+                Size {
+                    width: AvailableSpace::Definite(1280.0),
+                    height: AvailableSpace::Definite(720.0),
+                },
+            )
+            .unwrap();
 
         let mut primitives = Vec::new();
         self.generate_primitives_from_layout(tree, main_view, &mut primitives, glam::Vec2::ZERO);
-        
+
         if let Some(dw) = drawer_widget {
             // We need to find the drawer_node again or store it
             let node_children = self.taffy.children(container).unwrap();
             if node_children.len() > 1 {
-                self.generate_primitives_from_layout(&dw, node_children[1], &mut primitives, glam::Vec2::ZERO);
+                self.generate_primitives_from_layout(
+                    &dw,
+                    node_children[1],
+                    &mut primitives,
+                    glam::Vec2::ZERO,
+                );
             }
         }
-
 
         *self.primitive_stream.lock().unwrap() = primitives;
     }
 
-    pub fn handle_intents(&mut self, intents: Vec<crate::runtime::interaction_kernel::InteractionIntent>) {
+    pub fn handle_intents(
+        &mut self,
+        intents: Vec<crate::runtime::interaction_kernel::InteractionIntent>,
+    ) {
         for intent in intents {
             match intent {
                 crate::runtime::interaction_kernel::InteractionIntent::Connect { from, to } => {
@@ -172,10 +205,20 @@ impl SurfaceEngine {
                 crate::runtime::interaction_kernel::InteractionIntent::MoveNode { id, delta } => {
                     println!("Surface: Intent -> Move Node {:?} by {:?}", id, delta);
                 }
-                crate::runtime::interaction_kernel::InteractionIntent::UpdateParameter { node_id: _, parameter, value } => {
-                    println!("Surface: Intent -> Update Parameter '{}' to {:.3}", parameter, value);
+                crate::runtime::interaction_kernel::InteractionIntent::UpdateParameter {
+                    node_id: _,
+                    parameter,
+                    value,
+                } => {
+                    println!(
+                        "Surface: Intent -> Update Parameter '{}' to {:.3}",
+                        parameter, value
+                    );
                 }
-                crate::runtime::interaction_kernel::InteractionIntent::CompileCode { node_id: _, source } => {
+                crate::runtime::interaction_kernel::InteractionIntent::CompileCode {
+                    node_id: _,
+                    source,
+                } => {
                     println!("Surface: Intent -> Recompiling Node with new source...");
                 }
                 _ => {}
@@ -183,122 +226,198 @@ impl SurfaceEngine {
         }
     }
 
-
-
     fn build_taffy_recursive(&mut self, widget: &crate::ui_ir::SurfaceWidget) -> Node {
         use crate::ui_ir::SurfaceWidget::*;
         match widget {
             Column { children } => {
-                let child_nodes: Vec<_> = children.iter().map(|c| self.build_taffy_recursive(c)).collect();
-                self.taffy.new_with_children(Style {
-                    flex_direction: FlexDirection::Column,
-                    size: Size { width: Dimension::Percent(1.0), height: Dimension::Auto },
-                    ..Default::default()
-                }, &child_nodes).unwrap()
+                let child_nodes: Vec<_> = children
+                    .iter()
+                    .map(|c| self.build_taffy_recursive(c))
+                    .collect();
+                self.taffy
+                    .new_with_children(
+                        Style {
+                            flex_direction: FlexDirection::Column,
+                            size: Size {
+                                width: Dimension::Percent(1.0),
+                                height: Dimension::Auto,
+                            },
+                            ..Default::default()
+                        },
+                        &child_nodes,
+                    )
+                    .unwrap()
             }
             Row { children } => {
-                let child_nodes: Vec<_> = children.iter().map(|c| self.build_taffy_recursive(c)).collect();
-                self.taffy.new_with_children(Style {
-                    flex_direction: FlexDirection::Row,
-                    size: Size { width: Dimension::Percent(1.0), height: Dimension::Auto },
-                    ..Default::default()
-                }, &child_nodes).unwrap()
+                let child_nodes: Vec<_> = children
+                    .iter()
+                    .map(|c| self.build_taffy_recursive(c))
+                    .collect();
+                self.taffy
+                    .new_with_children(
+                        Style {
+                            flex_direction: FlexDirection::Row,
+                            size: Size {
+                                width: Dimension::Percent(1.0),
+                                height: Dimension::Auto,
+                            },
+                            ..Default::default()
+                        },
+                        &child_nodes,
+                    )
+                    .unwrap()
             }
-            FocusProxy { child, .. } => {
-                self.build_taffy_recursive(child)
-            }
-            Accessibility { child, .. } => {
-                self.build_taffy_recursive(child)
-            }
-            Knob { .. } | Slider { .. } => {
-                self.taffy.new_leaf(Style {
-                    size: Size { width: Dimension::Points(80.0), height: Dimension::Points(80.0) },
-                    margin: Rect { left: LengthPercentageAuto::Points(8.0), right: LengthPercentageAuto::Points(8.0), top: LengthPercentageAuto::Points(8.0), bottom: LengthPercentageAuto::Points(8.0) },
-                    ..Default::default()
-                }).unwrap()
-            }
-            LevelMeter { .. } => {
-                self.taffy.new_leaf(Style {
-                    size: Size { width: Dimension::Points(32.0), height: Dimension::Points(128.0) },
-                    ..Default::default()
-                }).unwrap()
-            }
-            XYPad { .. } => {
-                self.taffy.new_leaf(Style {
-                    size: Size { width: Dimension::Points(160.0), height: Dimension::Points(160.0) },
-                    margin: Rect { left: LengthPercentageAuto::Points(8.0), right: LengthPercentageAuto::Points(8.0), top: LengthPercentageAuto::Points(8.0), bottom: LengthPercentageAuto::Points(8.0) },
-                    ..Default::default()
-                }).unwrap()
-            }
-            Box { children, .. } => {
-                let children_nodes: Vec<_> = children.iter().map(|c| self.build_taffy_recursive(c)).collect();
-                self.taffy.new_with_children(
-                    Style {
-                        display: Display::Flex,
-                        flex_direction: FlexDirection::Column,
-                        padding: Rect::points(8.0),
-                        ..Default::default()
+            FocusProxy { child, .. } => self.build_taffy_recursive(child),
+            Accessibility { child, .. } => self.build_taffy_recursive(child),
+            Knob { .. } | Slider { .. } => self
+                .taffy
+                .new_leaf(Style {
+                    size: Size {
+                        width: Dimension::Points(80.0),
+                        height: Dimension::Points(80.0),
                     },
-                    &children_nodes,
-                ).unwrap()
+                    margin: Rect {
+                        left: LengthPercentageAuto::Points(8.0),
+                        right: LengthPercentageAuto::Points(8.0),
+                        top: LengthPercentageAuto::Points(8.0),
+                        bottom: LengthPercentageAuto::Points(8.0),
+                    },
+                    ..Default::default()
+                })
+                .unwrap(),
+            LevelMeter { .. } => self
+                .taffy
+                .new_leaf(Style {
+                    size: Size {
+                        width: Dimension::Points(32.0),
+                        height: Dimension::Points(128.0),
+                    },
+                    ..Default::default()
+                })
+                .unwrap(),
+            XYPad { .. } => self
+                .taffy
+                .new_leaf(Style {
+                    size: Size {
+                        width: Dimension::Points(160.0),
+                        height: Dimension::Points(160.0),
+                    },
+                    margin: Rect {
+                        left: LengthPercentageAuto::Points(8.0),
+                        right: LengthPercentageAuto::Points(8.0),
+                        top: LengthPercentageAuto::Points(8.0),
+                        bottom: LengthPercentageAuto::Points(8.0),
+                    },
+                    ..Default::default()
+                })
+                .unwrap(),
+            Box { children, .. } => {
+                let children_nodes: Vec<_> = children
+                    .iter()
+                    .map(|c| self.build_taffy_recursive(c))
+                    .collect();
+                self.taffy
+                    .new_with_children(
+                        Style {
+                            display: Display::Flex,
+                            flex_direction: FlexDirection::Column,
+                            padding: Rect::points(8.0),
+                            ..Default::default()
+                        },
+                        &children_nodes,
+                    )
+                    .unwrap()
             }
-            Button { .. } => {
-                self.taffy.new_leaf(Style {
-                    size: Size { width: Dimension::Auto, height: Dimension::Points(32.0) },
-                    min_size: Size { width: Dimension::Points(80.0), height: Dimension::Points(32.0) },
+            Button { .. } => self
+                .taffy
+                .new_leaf(Style {
+                    size: Size {
+                        width: Dimension::Auto,
+                        height: Dimension::Points(32.0),
+                    },
+                    min_size: Size {
+                        width: Dimension::Points(80.0),
+                        height: Dimension::Points(32.0),
+                    },
                     margin: Rect::points(4.0),
                     ..Default::default()
-                }).unwrap()
-            }
-            Custom { style, .. } => {
-                self.taffy.new_leaf(*style.clone()).unwrap()
-            }
-            Label { .. } => {
-                self.taffy.new_leaf(Style {
-                    size: Size { width: Dimension::Auto, height: Dimension::Points(24.0) },
-                    margin: Rect { left: LengthPercentageAuto::Points(8.0), right: LengthPercentageAuto::Points(8.0), top: LengthPercentageAuto::Points(4.0), bottom: LengthPercentageAuto::Points(4.0) },
+                })
+                .unwrap(),
+            Custom { style, .. } => self.taffy.new_leaf(*style.clone()).unwrap(),
+            Label { .. } => self
+                .taffy
+                .new_leaf(Style {
+                    size: Size {
+                        width: Dimension::Auto,
+                        height: Dimension::Points(24.0),
+                    },
+                    margin: Rect {
+                        left: LengthPercentageAuto::Points(8.0),
+                        right: LengthPercentageAuto::Points(8.0),
+                        top: LengthPercentageAuto::Points(4.0),
+                        bottom: LengthPercentageAuto::Points(4.0),
+                    },
                     ..Default::default()
-                }).unwrap()
-            }
-            PrimitiveStream { .. } => {
-                self.taffy.new_leaf(Style {
-                    size: Size { width: Dimension::Percent(1.0), height: Dimension::Auto },
+                })
+                .unwrap(),
+            PrimitiveStream { .. } => self
+                .taffy
+                .new_leaf(Style {
+                    size: Size {
+                        width: Dimension::Percent(1.0),
+                        height: Dimension::Auto,
+                    },
                     ..Default::default()
-                }).unwrap()
-            }
-            Timeline { .. } => {
-                self.taffy.new_leaf(Style {
-                    size: Size { width: Dimension::Percent(1.0), height: Dimension::Points(40.0) },
+                })
+                .unwrap(),
+            Timeline { .. } => self
+                .taffy
+                .new_leaf(Style {
+                    size: Size {
+                        width: Dimension::Percent(1.0),
+                        height: Dimension::Points(40.0),
+                    },
                     margin: Rect::points(8.0),
                     ..Default::default()
-                }).unwrap()
-            }
-            CodeView { .. } => {
-                self.taffy.new_leaf(Style {
-                    size: Size { width: Dimension::Percent(1.0), height: Dimension::Points(300.0) },
+                })
+                .unwrap(),
+            CodeView { .. } => self
+                .taffy
+                .new_leaf(Style {
+                    size: Size {
+                        width: Dimension::Percent(1.0),
+                        height: Dimension::Points(300.0),
+                    },
                     margin: Rect::points(4.0),
                     ..Default::default()
-                }).unwrap()
-            }
-            Waveform { .. } => {
-                self.taffy.new_leaf(Style {
-                    size: Size { width: Dimension::Percent(1.0), height: Dimension::Points(100.0) },
+                })
+                .unwrap(),
+            Waveform { .. } => self
+                .taffy
+                .new_leaf(Style {
+                    size: Size {
+                        width: Dimension::Percent(1.0),
+                        height: Dimension::Points(100.0),
+                    },
                     margin: Rect::points(8.0),
                     ..Default::default()
-                }).unwrap()
-            }
-            Spectrum { .. } => {
-                self.taffy.new_leaf(Style {
-                    size: Size { width: Dimension::Percent(1.0), height: Dimension::Points(120.0) },
+                })
+                .unwrap(),
+            Spectrum { .. } => self
+                .taffy
+                .new_leaf(Style {
+                    size: Size {
+                        width: Dimension::Percent(1.0),
+                        height: Dimension::Points(120.0),
+                    },
                     margin: Rect::points(8.0),
                     ..Default::default()
-                }).unwrap()
-            }
+                })
+                .unwrap(),
 
             _ => self.taffy.new_leaf(Style::default()).unwrap(),
         }
     }
-
 
     fn generate_primitives_from_layout(
         &mut self,
@@ -315,16 +434,21 @@ impl SurfaceEngine {
         let rect = crate::model::geometry::Rect::new(rounded_pos, size);
 
         use crate::ui_ir::SurfaceWidget::*;
-        
+
         // Populate Widget Geometry for generic interaction
-        self.widget_geometry.push((*widget.id().unwrap_or(&SurfaceId::generate()), rect));
+        self.widget_geometry
+            .push((*widget.id().unwrap_or(&SurfaceId::generate()), rect));
 
         match widget {
-            FocusProxy { child, id, is_focused } => {
+            FocusProxy {
+                child,
+                id,
+                is_focused,
+            } => {
                 self.generate_primitives_from_layout(child, node, primitives, parent_pos);
                 if *is_focused {
                     primitives.push(SurfacePrimitive::FocusRing {
-                        id: SurfaceId::from_seed(&format!("focus_proxy_{}", id.0.0)),
+                        id: SurfaceId::from_seed(&format!("focus_proxy_{}", id.0 .0)),
                         rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
                         color: [0.6, 1.0, 0.4, 1.0], // Lime accent
                         temporal: TemporalStrategy::Fast,
@@ -339,7 +463,12 @@ impl SurfaceEngine {
                 let node_children = self.taffy.children(node).unwrap();
                 for (i, child) in children.iter().enumerate() {
                     if i < node_children.len() {
-                        self.generate_primitives_from_layout(child, node_children[i], primitives, pos);
+                        self.generate_primitives_from_layout(
+                            child,
+                            node_children[i],
+                            primitives,
+                            pos,
+                        );
                     }
                 }
             }
@@ -347,7 +476,12 @@ impl SurfaceEngine {
                 let node_children = self.taffy.children(node).unwrap();
                 for (i, child) in children.iter().enumerate() {
                     if i < node_children.len() {
-                        self.generate_primitives_from_layout(child, node_children[i], primitives, pos);
+                        self.generate_primitives_from_layout(
+                            child,
+                            node_children[i],
+                            primitives,
+                            pos,
+                        );
                     }
                 }
             }
@@ -381,7 +515,12 @@ impl SurfaceEngine {
                     color: [0.8, 0.8, 0.8, 1.0],
                 });
             }
-            Slider { id, label, signal, is_vertical: _ } => {
+            Slider {
+                id,
+                label,
+                signal,
+                is_vertical: _,
+            } => {
                 let value = match signal {
                     DisplaySignal::Linear(v) => *v,
                     _ => 0.0,
@@ -418,14 +557,24 @@ impl SurfaceEngine {
                 });
                 primitives.push(SurfacePrimitive::Indicator {
                     id: id_stable,
-                    rect: [rounded_pos.x + size.x * 0.6, rounded_pos.y, size.x * 0.4, size.y],
+                    rect: [
+                        rounded_pos.x + size.x * 0.6,
+                        rounded_pos.y,
+                        size.x * 0.4,
+                        size.y,
+                    ],
                     kind: IndicatorKind::Led,
                     value: right,
                     color: [0.0, 1.0, 0.2, 1.0],
                     temporal: TemporalStrategy::Slow,
                 });
             }
-            XYPad { id, label, x_signal, y_signal } => {
+            XYPad {
+                id,
+                label,
+                x_signal,
+                y_signal,
+            } => {
                 let x = match x_signal {
                     DisplaySignal::Linear(v) => *v,
                     _ => 0.0,
@@ -444,7 +593,12 @@ impl SurfaceEngine {
                 // Pad Crosshair
                 primitives.push(SurfacePrimitive::Indicator {
                     id: *id,
-                    rect: [rounded_pos.x + x * size.x - 4.0, rounded_pos.y + y * size.y - 4.0, 8.0, 8.0],
+                    rect: [
+                        rounded_pos.x + x * size.x - 4.0,
+                        rounded_pos.y + y * size.y - 4.0,
+                        8.0,
+                        8.0,
+                    ],
                     kind: IndicatorKind::Led,
                     value: 1.0,
                     color: Color::ACCENT_LIME.to_array(),
@@ -463,29 +617,51 @@ impl SurfaceEngine {
                     id: SurfaceId::generate(),
                     rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
                     style: *style,
-                    color: if *style == FrameStyle::AuthorityGlass { [0.05, 0.05, 0.05, 0.9] } else { [0.2, 0.2, 0.2, 0.8] },
+                    color: if *style == FrameStyle::AuthorityGlass {
+                        [0.05, 0.05, 0.05, 0.9]
+                    } else {
+                        [0.2, 0.2, 0.2, 0.8]
+                    },
                     temporal: TemporalStrategy::Instant,
                 });
 
                 let node_children = self.taffy.children(node).unwrap();
                 for (i, child) in children.iter().enumerate() {
                     if i < node_children.len() {
-                        self.generate_primitives_from_layout(child, node_children[i], primitives, pos);
+                        self.generate_primitives_from_layout(
+                            child,
+                            node_children[i],
+                            primitives,
+                            pos,
+                        );
                     }
                 }
             }
 
-            Button { id, label, is_active } => {
+            Button {
+                id,
+                label,
+                is_active,
+            } => {
                 primitives.push(SurfacePrimitive::Frame {
                     id: *id,
                     rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
                     style: FrameStyle::Standard,
-                    color: if *is_active { [0.4, 0.4, 0.4, 1.0] } else { [0.3, 0.3, 0.3, 1.0] },
+                    color: if *is_active {
+                        [0.4, 0.4, 0.4, 1.0]
+                    } else {
+                        [0.3, 0.3, 0.3, 1.0]
+                    },
                     temporal: TemporalStrategy::Standard,
                 });
                 primitives.push(SurfacePrimitive::Text {
                     id: *id,
-                    rect: [rounded_pos.x + 8.0, rounded_pos.y + 4.0, size.x - 16.0, size.y - 8.0],
+                    rect: [
+                        rounded_pos.x + 8.0,
+                        rounded_pos.y + 4.0,
+                        size.x - 16.0,
+                        size.y - 8.0,
+                    ],
                     text: label.clone(),
                     font_size: 14.0,
                     color: [0.9, 0.9, 0.9, 1.0],
@@ -497,10 +673,17 @@ impl SurfaceEngine {
                     rect: [rounded_pos.x, rounded_pos.y, size.x, size.y],
                     text: text.clone(),
                     font_size: if *is_secondary { 12.0 } else { 16.0 },
-                    color: if *is_secondary { [0.6, 0.6, 0.6, 1.0] } else { [0.9, 0.9, 0.9, 1.0] },
+                    color: if *is_secondary {
+                        [0.6, 0.6, 0.6, 1.0]
+                    } else {
+                        [0.9, 0.9, 0.9, 1.0]
+                    },
                 });
             }
-            Custom { primitives: custom_primitives, .. } => {
+            Custom {
+                primitives: custom_primitives,
+                ..
+            } => {
                 for cp in custom_primitives {
                     let mut cp_cloned = cp.clone();
                     Self::offset_primitive(&mut cp_cloned, rounded_pos);
@@ -517,7 +700,12 @@ impl SurfaceEngine {
                 });
                 primitives.push(SurfacePrimitive::Text {
                     id: SurfaceId::generate(),
-                    rect: [rounded_pos.x + 8.0, rounded_pos.y + 8.0, size.x - 16.0, size.y - 16.0],
+                    rect: [
+                        rounded_pos.x + 8.0,
+                        rounded_pos.y + 8.0,
+                        size.x - 16.0,
+                        size.y - 16.0,
+                    ],
                     text: code.clone(),
                     font_size: 13.0,
                     color: [0.7, 0.9, 0.7, 1.0], // Hack: greenish code
@@ -533,19 +721,22 @@ impl SurfaceEngine {
                     color: [0.02, 0.02, 0.02, 1.0],
                     temporal: TemporalStrategy::Instant,
                 });
-                
+
                 // 2. Data Segments
                 if data.len() > 1 {
                     let step = size.x / (data.len() - 1) as f32;
                     let centerY = rounded_pos.y + size.y * 0.5;
                     let scaleY = size.y * 0.4;
-                    
+
                     for i in 0..(data.len() - 1) {
                         primitives.push(SurfacePrimitive::Curve {
                             id: id_stable,
                             control_points: vec![
                                 [rounded_pos.x + i as f32 * step, centerY - data[i] * scaleY],
-                                [rounded_pos.x + (i + 1) as f32 * step, centerY - data[i+1] * scaleY],
+                                [
+                                    rounded_pos.x + (i + 1) as f32 * step,
+                                    centerY - data[i + 1] * scaleY,
+                                ],
                             ],
                             kind: crate::ui_ir::CurveKind::Cable, // Hack: use cable kind for now
                             thickness: 1.5,
@@ -565,19 +756,22 @@ impl SurfaceEngine {
                     color: [0.01, 0.01, 0.01, 1.0],
                     temporal: TemporalStrategy::Instant,
                 });
-                
+
                 // 2. Spectrum Bars/Line
                 if data.len() > 1 {
                     let step = size.x / (data.len() - 1) as f32;
                     let bottomY = rounded_pos.y + size.y;
                     let scaleY = size.y * 0.9;
-                    
+
                     for i in 0..(data.len() - 1) {
                         primitives.push(SurfacePrimitive::Curve {
                             id: id_stable,
                             control_points: vec![
                                 [rounded_pos.x + i as f32 * step, bottomY - data[i] * scaleY],
-                                [rounded_pos.x + (i + 1) as f32 * step, bottomY - data[i+1] * scaleY],
+                                [
+                                    rounded_pos.x + (i + 1) as f32 * step,
+                                    bottomY - data[i + 1] * scaleY,
+                                ],
                             ],
                             kind: crate::ui_ir::CurveKind::Cable,
                             thickness: 2.0,
@@ -587,7 +781,6 @@ impl SurfaceEngine {
                     }
                 }
             }
-
 
             ForensicMonitor { id, data } => {
                 let id_stable = *id;
@@ -599,7 +792,7 @@ impl SurfaceEngine {
                     color: [0.1, 0.1, 0.1, 0.8],
                     temporal: TemporalStrategy::Instant,
                 });
-                
+
                 // 2. CPU Meter (Authority Lime)
                 let cpu_norm = (data.cpu_micros / 1000.0).min(1.0);
                 primitives.push(SurfacePrimitive::Indicator {
@@ -633,14 +826,20 @@ impl SurfaceEngine {
                     });
                 }
             }
-            PrimitiveStream { primitives: stream_primitives } => {
+            PrimitiveStream {
+                primitives: stream_primitives,
+            } => {
                 for p in stream_primitives {
                     let mut p_cloned = p.clone();
                     Self::offset_primitive(&mut p_cloned, rounded_pos);
                     primitives.push(p_cloned);
                 }
             }
-            Timeline { id, snapshots, current_idx } => {
+            Timeline {
+                id,
+                snapshots,
+                current_idx,
+            } => {
                 // 1. Background Bar
                 primitives.push(SurfacePrimitive::Frame {
                     id: *id,
@@ -658,10 +857,19 @@ impl SurfaceEngine {
                         let is_current = i == *current_idx;
                         primitives.push(SurfacePrimitive::Indicator {
                             id: *id,
-                            rect: [rounded_pos.x + progress * size.x - 4.0, rounded_pos.y + 12.0, 8.0, 16.0],
+                            rect: [
+                                rounded_pos.x + progress * size.x - 4.0,
+                                rounded_pos.y + 12.0,
+                                8.0,
+                                16.0,
+                            ],
                             kind: IndicatorKind::Led,
                             value: if is_current { 1.0 } else { 0.3 },
-                            color: if is_current { Color::ACCENT_LIME.to_array() } else { [0.5, 0.5, 0.5, 1.0] },
+                            color: if is_current {
+                                Color::ACCENT_LIME.to_array()
+                            } else {
+                                [0.5, 0.5, 0.5, 1.0]
+                            },
                             temporal: TemporalStrategy::Standard,
                         });
                     }
@@ -673,18 +881,26 @@ impl SurfaceEngine {
 
     pub fn generate_instances(&mut self) -> Vec<render::sdf::SdfInstance> {
         let mut primitives = self.primitive_stream.lock().unwrap().clone();
-        
+
         // Inject Active Interaction Primitives
         match &self.input.session {
-            crate::runtime::interaction_kernel::DragSession::Connecting { from_port, current_pos } => {
-                let start_pos = self.port_geometry.iter()
+            crate::runtime::interaction_kernel::DragSession::Connecting {
+                from_port,
+                current_pos,
+            } => {
+                let start_pos = self
+                    .port_geometry
+                    .iter()
                     .find(|(id, _)| id == from_port)
                     .map(|(_, circle)| circle.center)
                     .unwrap_or(glam::Vec2::ZERO);
 
                 primitives.push(SurfacePrimitive::Curve {
                     id: SurfaceId::generate(),
-                    control_points: vec![[start_pos.x, start_pos.y], [current_pos.x, current_pos.y]],
+                    control_points: vec![
+                        [start_pos.x, start_pos.y],
+                        [current_pos.x, current_pos.y],
+                    ],
                     kind: crate::ui_ir::CurveKind::Cable,
                     thickness: 3.0,
                     color: [1.0, 1.0, 1.0, 0.5],
@@ -702,14 +918,20 @@ impl SurfaceEngine {
         self.last_frame_time = now;
 
         // V7 Recursive Semantic Rendering
-        self.generate_instances_recursive(&primitives, &mut instances, glam::Mat4::IDENTITY, dt, now);
+        self.generate_instances_recursive(
+            &primitives,
+            &mut instances,
+            glam::Mat4::IDENTITY,
+            dt,
+            now,
+        );
 
         instances
     }
 
     fn generate_instances_recursive(
-        &mut self, 
-        primitives: &[SurfacePrimitive], 
+        &mut self,
+        primitives: &[SurfacePrimitive],
         instances: &mut Vec<render::sdf::SdfInstance>,
         transform: glam::Mat4,
         dt: f32,
@@ -717,9 +939,19 @@ impl SurfaceEngine {
     ) {
         for prim in primitives {
             match prim {
-                SurfacePrimitive::Frame { id: _, rect, style, color, .. } => {
+                SurfacePrimitive::Frame {
+                    id: _,
+                    rect,
+                    style,
+                    color,
+                    ..
+                } => {
                     let size = glam::Vec2::new(rect[2] * 0.5, rect[3] * 0.5);
-                    let p = transform.transform_point3(glam::vec3(rect[0] + size.x, rect[1] + size.y, 0.0));
+                    let p = transform.transform_point3(glam::vec3(
+                        rect[0] + size.x,
+                        rect[1] + size.y,
+                        0.0,
+                    ));
                     instances.push(render::sdf::SdfInstance {
                         position: glam::Vec2::new(p.x, p.y),
                         size: size * transform.x_axis.truncate().length(),
@@ -732,22 +964,40 @@ impl SurfaceEngine {
                         params2: glam::Vec4::ZERO,
                     });
                 }
-                SurfacePrimitive::Arc { id, center, radius, thickness, start_angle, end_angle, kind, .. } => {
+                SurfacePrimitive::Arc {
+                    id,
+                    center,
+                    radius,
+                    thickness,
+                    start_angle,
+                    end_angle,
+                    kind,
+                    ..
+                } => {
                     let state = self.transition_store.entry(*id).or_insert(TransitionState {
                         motion: crate::motion::MotionState::new(*end_angle),
                         target: *end_angle,
                         strategy: TemporalStrategy::Standard,
                     });
                     let current_end = {
-                    let (stiffness, damping) = match state.strategy {
-                        crate::ui_ir::TemporalStrategy::Fast => (crate::motion::constants::STIFFNESS_FAST, crate::motion::constants::DAMPING_FAST),
-                        crate::ui_ir::TemporalStrategy::Standard => (crate::motion::constants::STIFFNESS_STANDARD, crate::motion::constants::DAMPING_STANDARD),
-                        crate::ui_ir::TemporalStrategy::Slow => (crate::motion::constants::STIFFNESS_SLOW, crate::motion::constants::DAMPING_SLOW),
-                        crate::ui_ir::TemporalStrategy::Instant => (1000000.0, 1000.0),
+                        let (stiffness, damping) = match state.strategy {
+                            crate::ui_ir::TemporalStrategy::Fast => (
+                                crate::motion::constants::STIFFNESS_FAST,
+                                crate::motion::constants::DAMPING_FAST,
+                            ),
+                            crate::ui_ir::TemporalStrategy::Standard => (
+                                crate::motion::constants::STIFFNESS_STANDARD,
+                                crate::motion::constants::DAMPING_STANDARD,
+                            ),
+                            crate::ui_ir::TemporalStrategy::Slow => (
+                                crate::motion::constants::STIFFNESS_SLOW,
+                                crate::motion::constants::DAMPING_SLOW,
+                            ),
+                            crate::ui_ir::TemporalStrategy::Instant => (1000000.0, 1000.0),
+                        };
+                        state.motion.update(*end_angle, dt, stiffness, damping)
                     };
-                    state.motion.update(*end_angle, dt, stiffness, damping)
-                };
-                    
+
                     let half_angle = (current_end - start_angle).to_radians() * 0.5;
                     let sc = glam::Vec2::new(half_angle.sin(), half_angle.cos());
                     let p = transform.transform_point3(glam::vec3(center[0], center[1], 0.0));
@@ -759,15 +1009,15 @@ impl SurfaceEngine {
                         ArcKind::Progress => Color::ACCENT_BLUE,
                     };
 
-                    let size_val = (*radius + *thickness); 
+                    let size_val = (*radius + *thickness);
                     let ra = *radius / size_val;
                     let rb = (*thickness * 0.5) / size_val;
 
                     instances.push(render::sdf::SdfInstance {
                         position: glam::Vec2::new(p.x, p.y),
                         size: glam::Vec2::splat(size_val * scale),
-                        color: color.to_glam_vec4(), 
-                        shape_type: 2, 
+                        color: color.to_glam_vec4(),
+                        shape_type: 2,
                         _pad: 0,
                         modulation_depth: 0.0,
                         modulation_current: 0.0,
@@ -775,26 +1025,50 @@ impl SurfaceEngine {
                         params2: glam::Vec4::ZERO,
                     });
                 }
-                SurfacePrimitive::Indicator { id, rect, kind, value, color, temporal } => {
+                SurfacePrimitive::Indicator {
+                    id,
+                    rect,
+                    kind,
+                    value,
+                    color,
+                    temporal,
+                } => {
                     let state = self.transition_store.entry(*id).or_insert(TransitionState {
                         motion: crate::motion::MotionState::new(*value),
                         target: *value,
                         strategy: *temporal,
                     });
-                    
-                    let current_val = {
-                    let (stiffness, damping) = match state.strategy {
-                        crate::ui_ir::TemporalStrategy::Fast => (crate::motion::constants::STIFFNESS_FAST, crate::motion::constants::DAMPING_FAST),
-                        crate::ui_ir::TemporalStrategy::Standard => (crate::motion::constants::STIFFNESS_STANDARD, crate::motion::constants::DAMPING_STANDARD),
-                        crate::ui_ir::TemporalStrategy::Slow => (crate::motion::constants::STIFFNESS_SLOW, crate::motion::constants::DAMPING_SLOW),
-                        crate::ui_ir::TemporalStrategy::Instant => (1000000.0, 1000.0),
-                    };
-                    state.motion.update(*value, dt, stiffness, damping)
-                };
-                    let size = glam::Vec2::new(rect[2] * 0.5, rect[3] * 0.5);
-                    let p = transform.transform_point3(glam::vec3(rect[0] + size.x, rect[1] + size.y, 0.0));
 
-                    let shape_type = if matches!(kind, IndicatorKind::Led) { 11 } else { 6 };
+                    let current_val = {
+                        let (stiffness, damping) = match state.strategy {
+                            crate::ui_ir::TemporalStrategy::Fast => (
+                                crate::motion::constants::STIFFNESS_FAST,
+                                crate::motion::constants::DAMPING_FAST,
+                            ),
+                            crate::ui_ir::TemporalStrategy::Standard => (
+                                crate::motion::constants::STIFFNESS_STANDARD,
+                                crate::motion::constants::DAMPING_STANDARD,
+                            ),
+                            crate::ui_ir::TemporalStrategy::Slow => (
+                                crate::motion::constants::STIFFNESS_SLOW,
+                                crate::motion::constants::DAMPING_SLOW,
+                            ),
+                            crate::ui_ir::TemporalStrategy::Instant => (1000000.0, 1000.0),
+                        };
+                        state.motion.update(*value, dt, stiffness, damping)
+                    };
+                    let size = glam::Vec2::new(rect[2] * 0.5, rect[3] * 0.5);
+                    let p = transform.transform_point3(glam::vec3(
+                        rect[0] + size.x,
+                        rect[1] + size.y,
+                        0.0,
+                    ));
+
+                    let shape_type = if matches!(kind, IndicatorKind::Led) {
+                        11
+                    } else {
+                        6
+                    };
                     instances.push(render::sdf::SdfInstance {
                         position: glam::Vec2::new(p.x, p.y),
                         size: size * transform.x_axis.truncate().length(),
@@ -811,31 +1085,57 @@ impl SurfaceEngine {
                         params2: glam::Vec4::ZERO,
                     });
                 }
-                SurfacePrimitive::ProvenanceBadge { id, rect, level, temporal } => {
+                SurfacePrimitive::ProvenanceBadge {
+                    id,
+                    rect,
+                    level,
+                    temporal,
+                } => {
                     let state = self.transition_store.entry(*id).or_insert(TransitionState {
                         motion: crate::motion::MotionState::new(1.0),
                         target: 1.0,
                         strategy: *temporal,
                     });
-                    
+
                     let activity = {
-                    let (stiffness, damping) = match state.strategy {
-                        crate::ui_ir::TemporalStrategy::Fast => (crate::motion::constants::STIFFNESS_FAST, crate::motion::constants::DAMPING_FAST),
-                        crate::ui_ir::TemporalStrategy::Standard => (crate::motion::constants::STIFFNESS_STANDARD, crate::motion::constants::DAMPING_STANDARD),
-                        crate::ui_ir::TemporalStrategy::Slow => (crate::motion::constants::STIFFNESS_SLOW, crate::motion::constants::DAMPING_SLOW),
-                        crate::ui_ir::TemporalStrategy::Instant => (1000000.0, 1000.0),
+                        let (stiffness, damping) = match state.strategy {
+                            crate::ui_ir::TemporalStrategy::Fast => (
+                                crate::motion::constants::STIFFNESS_FAST,
+                                crate::motion::constants::DAMPING_FAST,
+                            ),
+                            crate::ui_ir::TemporalStrategy::Standard => (
+                                crate::motion::constants::STIFFNESS_STANDARD,
+                                crate::motion::constants::DAMPING_STANDARD,
+                            ),
+                            crate::ui_ir::TemporalStrategy::Slow => (
+                                crate::motion::constants::STIFFNESS_SLOW,
+                                crate::motion::constants::DAMPING_SLOW,
+                            ),
+                            crate::ui_ir::TemporalStrategy::Instant => (1000000.0, 1000.0),
+                        };
+                        state.motion.update(1.0, dt, stiffness, damping)
                     };
-                    state.motion.update(1.0, dt, stiffness, damping)
-                };
                     let size = glam::Vec2::new(rect[2] * 0.5, rect[3] * 0.5);
-                    let p = transform.transform_point3(glam::vec3(rect[0] + size.x, rect[1] + size.y, 0.0));
+                    let p = transform.transform_point3(glam::vec3(
+                        rect[0] + size.x,
+                        rect[1] + size.y,
+                        0.0,
+                    ));
 
                     // Map ProvenanceLevel to PD_INDICATOR kinds
                     let (kind, color) = match level {
-                        crate::ui_ir::ProvenanceLevel::Verified => (IndicatorKind::Led, Color::ACCENT_LIME),
-                        crate::ui_ir::ProvenanceLevel::Inferred => (IndicatorKind::Toggle, Color::ACCENT_BLUE),
-                        crate::ui_ir::ProvenanceLevel::Stale => (IndicatorKind::Radio, Color::SYNTAX_COMMENT),
-                        crate::ui_ir::ProvenanceLevel::External => (IndicatorKind::Bang, Color::ERROR_RED),
+                        crate::ui_ir::ProvenanceLevel::Verified => {
+                            (IndicatorKind::Led, Color::ACCENT_LIME)
+                        }
+                        crate::ui_ir::ProvenanceLevel::Inferred => {
+                            (IndicatorKind::Toggle, Color::ACCENT_BLUE)
+                        }
+                        crate::ui_ir::ProvenanceLevel::Stale => {
+                            (IndicatorKind::Radio, Color::SYNTAX_COMMENT)
+                        }
+                        crate::ui_ir::ProvenanceLevel::External => {
+                            (IndicatorKind::Bang, Color::ERROR_RED)
+                        }
                     };
 
                     instances.push(render::sdf::SdfInstance {
@@ -850,18 +1150,30 @@ impl SurfaceEngine {
                         params2: glam::Vec4::ZERO,
                     });
                 }
-                SurfacePrimitive::CausalityLink { source_id: _, target_id: _, voice_id: _, path, intensity, confidence, relevance: _, activity, color } => {
-                    if path.len() < 2 { continue; }
-                    
+                SurfacePrimitive::CausalityLink {
+                    source_id: _,
+                    target_id: _,
+                    voice_id: _,
+                    path,
+                    intensity,
+                    confidence,
+                    relevance: _,
+                    activity,
+                    color,
+                } => {
+                    if path.len() < 2 {
+                        continue;
+                    }
+
                     for window in path.windows(2) {
                         let p0 = glam::Vec2::from_array(window[0]);
                         let p1 = glam::Vec2::from_array(window[1]);
                         let center = (p0 + p1) * 0.5;
                         let diff = p1 - p0;
                         let length = diff.length();
-                        
+
                         let p = transform.transform_point3(glam::vec3(center.x, center.y, 0.0));
-                        
+
                         instances.push(render::sdf::SdfInstance {
                             position: glam::Vec2::new(p.x, p.y),
                             size: glam::Vec2::new(length * 0.5, 4.0), // thickness 4.0
@@ -875,24 +1187,42 @@ impl SurfaceEngine {
                         });
                     }
                 }
-                SurfacePrimitive::FocusRing { id, rect, color, temporal } => {
+                SurfacePrimitive::FocusRing {
+                    id,
+                    rect,
+                    color,
+                    temporal,
+                } => {
                     let state = self.transition_store.entry(*id).or_insert(TransitionState {
                         motion: crate::motion::MotionState::new(0.0),
                         target: 1.0,
                         strategy: *temporal,
                     });
-                    
+
                     let activity = {
-                    let (stiffness, damping) = match state.strategy {
-                        crate::ui_ir::TemporalStrategy::Fast => (crate::motion::constants::STIFFNESS_FAST, crate::motion::constants::DAMPING_FAST),
-                        crate::ui_ir::TemporalStrategy::Standard => (crate::motion::constants::STIFFNESS_STANDARD, crate::motion::constants::DAMPING_STANDARD),
-                        crate::ui_ir::TemporalStrategy::Slow => (crate::motion::constants::STIFFNESS_SLOW, crate::motion::constants::DAMPING_SLOW),
-                        crate::ui_ir::TemporalStrategy::Instant => (1000000.0, 1000.0),
+                        let (stiffness, damping) = match state.strategy {
+                            crate::ui_ir::TemporalStrategy::Fast => (
+                                crate::motion::constants::STIFFNESS_FAST,
+                                crate::motion::constants::DAMPING_FAST,
+                            ),
+                            crate::ui_ir::TemporalStrategy::Standard => (
+                                crate::motion::constants::STIFFNESS_STANDARD,
+                                crate::motion::constants::DAMPING_STANDARD,
+                            ),
+                            crate::ui_ir::TemporalStrategy::Slow => (
+                                crate::motion::constants::STIFFNESS_SLOW,
+                                crate::motion::constants::DAMPING_SLOW,
+                            ),
+                            crate::ui_ir::TemporalStrategy::Instant => (1000000.0, 1000.0),
+                        };
+                        state.motion.update(1.0, dt, stiffness, damping)
                     };
-                    state.motion.update(1.0, dt, stiffness, damping)
-                };
                     let size = glam::Vec2::new(rect[2] * 0.5, rect[3] * 0.5);
-                    let p = transform.transform_point3(glam::vec3(rect[0] + size.x, rect[1] + size.y, 0.0));
+                    let p = transform.transform_point3(glam::vec3(
+                        rect[0] + size.x,
+                        rect[1] + size.y,
+                        0.0,
+                    ));
 
                     instances.push(render::sdf::SdfInstance {
                         position: glam::Vec2::new(p.x, p.y),
@@ -906,10 +1236,19 @@ impl SurfaceEngine {
                         params2: glam::Vec4::ZERO,
                     });
                 }
-                SurfacePrimitive::ContradictionMarker { id: _, rect, severity, description: _ } => {
+                SurfacePrimitive::ContradictionMarker {
+                    id: _,
+                    rect,
+                    severity,
+                    description: _,
+                } => {
                     let size = glam::Vec2::new(rect[2] * 0.5, rect[3] * 0.5);
-                    let p = transform.transform_point3(glam::vec3(rect[0] + size.x, rect[1] + size.y, 0.0));
-                    
+                    let p = transform.transform_point3(glam::vec3(
+                        rect[0] + size.x,
+                        rect[1] + size.y,
+                        0.0,
+                    ));
+
                     let color = match severity {
                         crate::ui_ir::ContradictionSeverity::Divergence => Color::SYNTAX_COMMENT,
                         crate::ui_ir::ContradictionSeverity::Inconsistency => Color::AMBER,
@@ -933,12 +1272,15 @@ impl SurfaceEngine {
         }
     }
 
-    
-
     fn offset_primitive(prim: &mut crate::ui_ir::SurfacePrimitive, offset: glam::Vec2) {
         use crate::ui_ir::SurfacePrimitive::*;
         match prim {
-            Frame { rect, .. } | Indicator { rect, .. } | ConstraintBox { rect, .. } | FocusRing { rect, .. } | ProvenanceBadge { rect, .. } | ContradictionMarker { rect, .. } => {
+            Frame { rect, .. }
+            | Indicator { rect, .. }
+            | ConstraintBox { rect, .. }
+            | FocusRing { rect, .. }
+            | ProvenanceBadge { rect, .. }
+            | ContradictionMarker { rect, .. } => {
                 rect[0] += offset.x;
                 rect[1] += offset.y;
             }

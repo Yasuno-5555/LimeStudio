@@ -1,13 +1,12 @@
 //! Glyphon Integration — Measurement-grade Typography.
-//! 
+//!
 //! Focus on JetBrains Mono for readable numbers and code.
 
 use glyphon::{
-    FontSystem, SwashCache, TextAtlas, TextRenderer, 
-    Buffer, Metrics, Shaping, Family, Attrs, 
-    Resolution, TextArea, Color, Cache, Viewport
+    Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
+    TextArea, TextAtlas, TextRenderer, Viewport,
 };
-use wgpu::{Device, Queue, TextureFormat, MultisampleState, RenderPass};
+use wgpu::{Device, MultisampleState, Queue, RenderPass, TextureFormat};
 pub struct TextBlock {
     pub buffer: Buffer,
     pub pos: glam::Vec2,
@@ -64,10 +63,10 @@ impl TypographySystem {
     ) {
         let mut buffer = Buffer::new(&mut self.font_system, Metrics::new(font_size, line_height));
         buffer.set_size(&mut self.font_system, Some(800.0), Some(600.0)); // Max bounds
-        
+
         let attrs = Attrs::new().family(Family::Monospace);
         let (r, g, b, a) = color.to_rgba_u8();
-        
+
         buffer.set_text(&mut self.font_system, text, attrs, Shaping::Advanced);
         buffer.shape_until_scroll(&mut self.font_system, true);
 
@@ -78,40 +77,42 @@ impl TypographySystem {
         });
     }
 
-    pub fn render<'a>(
-        &'a mut self,
-        device: &Device,
-        queue: &Queue,
-        rpass: &mut RenderPass<'a>,
-    ) {
-        let text_areas: Vec<TextArea> = self.blocks.iter().map(|block| {
-            TextArea {
-                buffer: &block.buffer,
-                left: block.pos.x,
-                top: block.pos.y,
-                scale: 1.0,
-                bounds: glyphon::TextBounds {
-                    left: 0,
-                    top: 0,
-                    right: 2048, // Large enough for now
-                    bottom: 2048,
-                },
-                default_color: block.color,
-                custom_glyphs: &[],
-            }
-        }).collect();
+    pub fn render<'a>(&'a mut self, device: &Device, queue: &Queue, rpass: &mut RenderPass<'a>) {
+        let text_areas: Vec<TextArea> = self
+            .blocks
+            .iter()
+            .map(|block| {
+                TextArea {
+                    buffer: &block.buffer,
+                    left: block.pos.x,
+                    top: block.pos.y,
+                    scale: 1.0,
+                    bounds: glyphon::TextBounds {
+                        left: 0,
+                        top: 0,
+                        right: 2048, // Large enough for now
+                        bottom: 2048,
+                    },
+                    default_color: block.color,
+                    custom_glyphs: &[],
+                }
+            })
+            .collect();
 
-        self.renderer.prepare(
-            device,
-            queue,
-            &mut self.font_system,
-            &mut self.atlas,
-            &self.viewport,
-            text_areas,
-            &mut self.swash_cache,
-        ).unwrap();
+        self.renderer
+            .prepare(
+                device,
+                queue,
+                &mut self.font_system,
+                &mut self.atlas,
+                &self.viewport,
+                text_areas,
+                &mut self.swash_cache,
+            )
+            .unwrap();
 
-        self.renderer.render(&self.atlas, &self.viewport, rpass).unwrap();
+        self.renderer
+            .render(&self.atlas, &self.viewport, rpass)
+            .unwrap();
     }
 }
-

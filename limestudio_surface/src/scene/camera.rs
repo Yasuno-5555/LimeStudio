@@ -1,4 +1,4 @@
-use glam::{Vec2, Mat4};
+use glam::{Mat4, Vec2};
 
 #[derive(Debug, Clone)]
 pub struct InfiniteCamera {
@@ -36,11 +36,11 @@ impl InfiniteCamera {
         let normalized = (screen_pos - half_size) / half_size;
         // Invert Y because screen Y is down
         let _normalized = Vec2::new(normalized.x, -normalized.y);
-        
+
         // This is a bit simplified. Let's do it more directly.
         // Screen Space (0,0 to width,height)
         // World Space center at self.center
-        
+
         let rel_screen = screen_pos - half_size;
         self.center + rel_screen / self.zoom
     }
@@ -60,21 +60,21 @@ impl InfiniteCamera {
         let right = self.center.x + half_size.x / self.zoom;
         let bottom = self.center.y + half_size.y / self.zoom; // Screen Y is down, so top/bottom might be flipped in world
         let top = self.center.y - half_size.y / self.zoom;
-        
+
         Mat4::orthographic_rh(left, right, bottom, top, 0.0, 1000.0)
     }
-    
+
     pub fn pan(&mut self, delta: Vec2) {
         self.center -= delta / self.zoom;
     }
-    
+
     pub fn zoom_at(&mut self, screen_pos: Vec2, delta: f32) {
         let _old_zoom = self.zoom;
         let world_at_mouse = self.screen_to_world(screen_pos);
-        
+
         self.zoom *= delta;
         self.zoom = self.zoom.clamp(0.01, 100.0);
-        
+
         // Adjust center to keep world_at_mouse under the cursor
         let new_world_at_mouse = self.screen_to_world(screen_pos);
         self.center += world_at_mouse - new_world_at_mouse;

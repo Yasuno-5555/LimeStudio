@@ -1,14 +1,14 @@
-use nih_plug::prelude::*;
-use std::sync::Arc;
-use std::cell::RefCell;
-use crate::observation::{ObservationProducer, ObservationConsumer};
 use crate::editor::SurfaceEditor;
+use crate::observation::{ObservationConsumer, ObservationProducer};
 use crate::Widget;
+use nih_plug::prelude::*;
+use std::cell::RefCell;
+use std::sync::Arc;
 
 use limestudio_core::engine::VoiceManager;
 use limestudio_core::graph::GraphBuilder;
-use rtrb::{RingBuffer, Producer};
 use limestudio_core::PatchEvent;
+use rtrb::{Producer, RingBuffer};
 
 pub trait LimeProcessor: Send + Sync + 'static {
     type Params: Params;
@@ -25,7 +25,7 @@ pub trait LimeProcessor: Send + Sync + 'static {
     fn build_ui(params: &Self::Params, obs_consumer: ObservationConsumer) -> Box<dyn Widget + '_>;
 
     fn initialize(&mut self, _sample_rate: f32) {}
-    
+
     fn handle_event(&mut self, _event: NoteEvent<()>) {}
 }
 
@@ -48,7 +48,10 @@ impl<T: LimeProcessor> LimeHost<T> {
 
     pub fn process_event(&mut self, event: NoteEvent<()>) {
         // Audit the event
-        self.event_log.push(format!("Event at {}: {:?}", self.last_processed_sample, event));
+        self.event_log.push(format!(
+            "Event at {}: {:?}",
+            self.last_processed_sample, event
+        ));
         self.inner.handle_event(event);
     }
 }
@@ -63,8 +66,10 @@ pub struct LimeAdapter<T: LimeProcessor> {
     pub sample_rate: f32,
 }
 
-impl<T: LimeProcessor> Default for LimeAdapter<T> 
-where T: Default {
+impl<T: LimeProcessor> Default for LimeAdapter<T>
+where
+    T: Default,
+{
     fn default() -> Self {
         let (prod, cons) = crate::observation::create_pipeline(512);
         let inner = T::default();
@@ -88,13 +93,11 @@ impl<T: LimeProcessor + Default + Send + 'static> Plugin for LimeAdapter<T> {
     const EMAIL: &'static str = T::EMAIL;
     const VERSION: &'static str = T::VERSION;
 
-    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[
-        AudioIOLayout {
-            main_input_channels: std::num::NonZeroU32::new(2),
-            main_output_channels: std::num::NonZeroU32::new(2),
-            ..AudioIOLayout::const_default()
-        },
-    ];
+    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[AudioIOLayout {
+        main_input_channels: std::num::NonZeroU32::new(2),
+        main_output_channels: std::num::NonZeroU32::new(2),
+        ..AudioIOLayout::const_default()
+    }];
 
     type SysExMessage = ();
     type BackgroundTask = ();
@@ -102,7 +105,6 @@ impl<T: LimeProcessor + Default + Send + 'static> Plugin for LimeAdapter<T> {
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone() as Arc<dyn Params>
     }
-
 
     fn initialize(
         &mut self,
@@ -121,7 +123,13 @@ impl<T: LimeProcessor + Default + Send + 'static> Plugin for LimeAdapter<T> {
         // Initialize engine
         let (prod, cons) = RingBuffer::<PatchEvent>::new(1024);
         self.patch_producer = Some(prod);
-        self.engine = Some(VoiceManager::from_graph(&graph, cons, 16, self.sample_rate, None));
+        self.engine = Some(VoiceManager::from_graph(
+            &graph,
+            cons,
+            16,
+            self.sample_rate,
+            None,
+        ));
 
         true
     }
@@ -137,16 +145,27 @@ impl<T: LimeProcessor + Default + Send + 'static> Plugin for LimeAdapter<T> {
                 self.host.process_event(event);
                 match event {
                     NoteEvent::NoteOn { note, velocity, .. } => {
-                        engine.handle_event(limestudio_core::engine::VoiceEvent::NoteOn { pitch: note, velocity });
+                        engine.handle_event(limestudio_core::engine::VoiceEvent::NoteOn {
+                            pitch: note,
+                            velocity,
+                        });
                     }
                     NoteEvent::NoteOff { note, .. } => {
-                        engine.handle_event(limestudio_core::engine::VoiceEvent::NoteOff { pitch: note });
+                        engine.handle_event(limestudio_core::engine::VoiceEvent::NoteOff {
+                            pitch: note,
+                        });
                     }
                     NoteEvent::PolyPressure { note, pressure, .. } => {
-                        engine.handle_event(limestudio_core::engine::VoiceEvent::Pressure { pitch: note, value: pressure });
+                        engine.handle_event(limestudio_core::engine::VoiceEvent::Pressure {
+                            pitch: note,
+                            value: pressure,
+                        });
                     }
                     NoteEvent::PolyTuning { note, tuning, .. } => {
-                        engine.handle_event(limestudio_core::engine::VoiceEvent::Tuning { pitch: note, value: tuning });
+                        engine.handle_event(limestudio_core::engine::VoiceEvent::Tuning {
+                            pitch: note,
+                            value: tuning,
+                        });
                     }
                     _ => {}
                 }
@@ -157,7 +176,8 @@ impl<T: LimeProcessor + Default + Send + 'static> Plugin for LimeAdapter<T> {
             let ptr = slices.as_ptr();
             let len = slices.len();
 
-            let inputs: &[&[f32]] = unsafe { std::slice::from_raw_parts(ptr as *const &[f32], len) };
+            let inputs: &[&[f32]] =
+                unsafe { std::slice::from_raw_parts(ptr as *const &[f32], len) };
             let outputs: &mut [&mut [f32]] = slices;
 
             engine.process(inputs, outputs, self.sample_rate);

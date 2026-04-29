@@ -1,16 +1,16 @@
-use nih_plug::prelude::*;
-use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
-use std::any::Any;
-use std::time::{Instant, Duration};
-use crate::ui::Widget;
-use limestudio_surface::SurfaceEngine;
-use limestudio_surface::render::SurfaceRenderer;
-use once_cell::sync::Lazy;
-use raw_window_handle::{RawWindowHandle, RawDisplayHandle};
 use crate::interaction::{InteractionEvent, InteractionStore};
 use crate::observation::{ObservationConsumer, ObservationEvent};
+use crate::ui::Widget;
+use limestudio_surface::render::SurfaceRenderer;
+use limestudio_surface::SurfaceEngine;
+use nih_plug::prelude::*;
+use once_cell::sync::Lazy;
+use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use rtrb::RingBuffer;
+use std::any::Any;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// Global WGPU resources shared across all plugin instances.
 struct SharedWgpu {
@@ -26,17 +26,29 @@ static SHARED_WGPU: Lazy<Option<Arc<SharedWgpu>>> = Lazy::new(|| {
     });
 
     pollster::block_on(async {
-        let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            ..Default::default()
-        }).await?;
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                ..Default::default()
+            })
+            .await?;
 
-        let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("LimeStudio Shared Device"),
-            ..Default::default()
-        }, None).await.ok()?;
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: Some("LimeStudio Shared Device"),
+                    ..Default::default()
+                },
+                None,
+            )
+            .await
+            .ok()?;
 
-        Some(Arc::new(SharedWgpu { instance, device, queue }))
+        Some(Arc::new(SharedWgpu {
+            instance,
+            device,
+            queue,
+        }))
     })
 });
 
@@ -58,9 +70,19 @@ pub struct SurfaceEditor<P, F> {
 impl<P, F> SurfaceEditor<P, F>
 where
     P: Params + 'static,
-    F: for<'a> Fn(&'a P, &'a ObservationState) -> Box<dyn Widget + 'a> + Send + Sync + Clone + 'static,
+    F: for<'a> Fn(&'a P, &'a ObservationState) -> Box<dyn Widget + 'a>
+        + Send
+        + Sync
+        + Clone
+        + 'static,
 {
-    pub fn new(params: Arc<P>, ui_build: F, obs_consumer: Option<ObservationConsumer>, width: u32, height: u32) -> Self {
+    pub fn new(
+        params: Arc<P>,
+        ui_build: F,
+        obs_consumer: Option<ObservationConsumer>,
+        width: u32,
+        height: u32,
+    ) -> Self {
         Self {
             params,
             ui_build,
@@ -80,7 +102,11 @@ struct EditorInstance {
 impl<P, F> Editor for SurfaceEditor<P, F>
 where
     P: Params + 'static,
-    F: for<'a> Fn(&'a P, &'a ObservationState) -> Box<dyn Widget + 'a> + Send + Sync + Clone + 'static,
+    F: for<'a> Fn(&'a P, &'a ObservationState) -> Box<dyn Widget + 'a>
+        + Send
+        + Sync
+        + Clone
+        + 'static,
 {
     fn spawn(
         &self,
@@ -89,7 +115,12 @@ where
     ) -> Box<dyn Any + Send> {
         let wgpu = match &*SHARED_WGPU {
             Some(w) => w,
-            None => return Box::new(EditorInstance { is_alive: Arc::new(Mutex::new(false)), poll_thread: None }),
+            None => {
+                return Box::new(EditorInstance {
+                    is_alive: Arc::new(Mutex::new(false)),
+                    poll_thread: None,
+                })
+            }
         };
 
         let engine = Arc::new(Mutex::new(SurfaceEngine::new()));
@@ -97,13 +128,14 @@ where
         let ui_build = self.ui_build.clone();
         let params = self.params.clone();
         let mut obs_consumer = self.obs_consumer.lock().unwrap().take();
-        
+
         let width = self.width;
         let height = self.height;
 
         let (mut _event_tx, mut event_rx) = RingBuffer::<InteractionEvent>::new(1024);
         let interaction_store = Arc::new(InteractionStore::new());
-        let param_map: HashMap<String, ParamPtr> = params.param_map()
+        let param_map: HashMap<String, ParamPtr> = params
+            .param_map()
             .into_iter()
             .map(|(id, ptr, _group)| (id.to_string(), ptr))
             .collect();
@@ -150,26 +182,41 @@ where
             #[cfg(target_os = "linux")]
             ParentWindowHandle::X11Window(window) => {
                 let h = raw_window_handle::XlibWindowHandle::new(window as std::os::raw::c_ulong);
-                (RawWindowHandle::Xlib(h), RawDisplayHandle::Xlib(raw_window_handle::XlibDisplayHandle::new(None, 0)))
+                (
+                    RawWindowHandle::Xlib(h),
+                    RawDisplayHandle::Xlib(raw_window_handle::XlibDisplayHandle::new(None, 0)),
+                )
             }
             #[cfg(target_os = "windows")]
             ParentWindowHandle::Win32Hwnd(hwnd) => {
-                let h = raw_window_handle::Win32WindowHandle::new(std::num::NonZeroIsize::new(hwnd as isize).unwrap());
-                (RawWindowHandle::Win32(h), RawDisplayHandle::Windows(raw_window_handle::WindowsDisplayHandle::new()))
+                let h = raw_window_handle::Win32WindowHandle::new(
+                    std::num::NonZeroIsize::new(hwnd as isize).unwrap(),
+                );
+                (
+                    RawWindowHandle::Win32(h),
+                    RawDisplayHandle::Windows(raw_window_handle::WindowsDisplayHandle::new()),
+                )
             }
             #[cfg(target_os = "macos")]
             ParentWindowHandle::AppKitNsView(nsview) => {
-                let h = raw_window_handle::AppKitWindowHandle::new(std::ptr::NonNull::new(nsview).unwrap());
-                (RawWindowHandle::AppKit(h), RawDisplayHandle::AppKit(raw_window_handle::AppKitDisplayHandle::new()))
+                let h = raw_window_handle::AppKitWindowHandle::new(
+                    std::ptr::NonNull::new(nsview).unwrap(),
+                );
+                (
+                    RawWindowHandle::AppKit(h),
+                    RawDisplayHandle::AppKit(raw_window_handle::AppKitDisplayHandle::new()),
+                )
             }
             _ => panic!("Unsupported platform"),
         };
 
         let surface = unsafe {
-            wgpu.instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                raw_display_handle: display_handle,
-                raw_window_handle: window_handle,
-            }).unwrap()
+            wgpu.instance
+                .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle: display_handle,
+                    raw_window_handle: window_handle,
+                })
+                .unwrap()
         };
 
         let format = wgpu::TextureFormat::Bgra8UnormSrgb;
@@ -185,7 +232,8 @@ where
         };
         surface.configure(&wgpu.device, &config);
 
-        let mut renderer = pollster::block_on(SurfaceRenderer::new(&wgpu.device, &wgpu.queue, format));
+        let mut renderer =
+            pollster::block_on(SurfaceRenderer::new(&wgpu.device, &wgpu.queue, format));
 
         let is_alive_thread = is_alive.clone();
         let shared_wgpu = wgpu.clone();
@@ -211,15 +259,25 @@ where
                 // 2. Projection (incorporating ObservationState)
                 let tree = (ui_build)(&params, &obs_state);
                 let ir = tree.build();
-                
+
                 // 3. Reconciliation & Render
                 if let Ok(mut engine) = engine.lock() {
                     engine.sync_ui(&ir);
                     let instances = engine.generate_instances();
-                    
+
                     if let Ok(output) = surface.get_current_texture() {
-                        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                        renderer.render_scene(&shared_wgpu.device, &shared_wgpu.queue, &view, 0.0, engine.camera.view_projection(), &instances, &[]);
+                        let view = output
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+                        renderer.render_scene(
+                            &shared_wgpu.device,
+                            &shared_wgpu.queue,
+                            &view,
+                            0.0,
+                            engine.camera.view_projection(),
+                            &instances,
+                            &[],
+                        );
                         output.present();
                     }
                 }
@@ -227,8 +285,11 @@ where
                 std::thread::sleep(Duration::from_millis(16));
             }
         });
-        
-        Box::new(EditorInstance { is_alive, poll_thread: Some(poll_thread) })
+
+        Box::new(EditorInstance {
+            is_alive,
+            poll_thread: Some(poll_thread),
+        })
     }
 
     fn size(&self) -> (u32, u32) {

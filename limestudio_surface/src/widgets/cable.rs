@@ -1,11 +1,11 @@
 //! Semantic Cable Renderer — Line = Semantics.
-//! 
+//!
 //! Different visual styles for Audio, Control, and Event rates.
 //! Highlights feedback dangers and latency paths.
 
-use glam::Vec2;
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, CurveKind, TemporalStrategy, SurfaceId};
+use crate::ui_ir::{CurveKind, SurfaceId, SurfacePrimitive, TemporalStrategy};
+use glam::Vec2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SemanticRate {

@@ -4,21 +4,17 @@ use std::collections::HashMap;
 
 fn main() {
     println!("LimeStudio Synth Template");
-    
+
     // Create a basic polyphonic sine synth
     let mut builder = GraphBuilder::new();
-    let osc = builder.add_processor("Oscillator", vec![
-        ("freq", ParamSource::Constant(440.0)),
-    ]);
+    let osc = builder.add_processor("Oscillator", vec![("freq", ParamSource::Constant(440.0))]);
     builder.connect(osc, builder.output_node());
-    
+
     let graph = builder.build();
-    let preset = PresetArtifact::new(
-        "Synth Template".to_string(),
-        graph,
-        HashMap::new(),
-        None,
+    let preset = PresetArtifact::new("Synth Template".to_string(), graph, HashMap::new(), None);
+
+    println!(
+        "Initial preset generated with {} nodes.",
+        preset.graph.nodes.len()
     );
-    
-    println!("Initial preset generated with {} nodes.", preset.graph.nodes.len());
 }

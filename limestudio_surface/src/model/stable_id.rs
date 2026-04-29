@@ -1,5 +1,5 @@
 use dirtydata_core::types::StableId;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// A wrapper or utility for StableId in the surface domain.
 /// This helps in tracking nodes, ports, and cables between UI frames.
@@ -20,7 +20,9 @@ impl SurfaceId {
         // Deterministic ID from seed using BLAKE3 hash
         let h = blake3::hash(seed.as_bytes());
         let bytes = &h.as_bytes()[0..16];
-        Self(dirtydata_core::types::StableId(ulid::Ulid::from_bytes(bytes.try_into().unwrap())))
+        Self(dirtydata_core::types::StableId(ulid::Ulid::from_bytes(
+            bytes.try_into().unwrap(),
+        )))
     }
 }
 

@@ -1,5 +1,5 @@
+use crate::ui_ir::{ProvenanceLevel, SurfaceId, SurfacePrimitive, TemporalStrategy};
 use glam::Vec2;
-use crate::ui_ir::{SurfacePrimitive, TemporalStrategy, SurfaceId, ProvenanceLevel};
 
 pub struct SurfaceBadge {
     pub id: SurfaceId,

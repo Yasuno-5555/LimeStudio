@@ -1,7 +1,7 @@
 //! LimeGraph: The Unified Nervous System.
 //! This is the Single Source of Truth for both DSP and UI.
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -18,7 +18,7 @@ pub struct LimeGraph {
 pub struct LimeNode {
     pub id: NodeId,
     pub kind: String,
-    
+
     // --- Components ---
     pub dsp: Option<DspComponent>,
     pub ui: Option<UiComponent>,
@@ -61,7 +61,9 @@ pub struct GraphMetadata {
 }
 
 impl Default for LimeGraph {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LimeGraph {
@@ -78,12 +80,22 @@ impl LimeGraph {
         let node = LimeNode {
             id,
             kind: kind.to_string(),
-            dsp: Some(DspComponent { params: HashMap::new(), is_active: true }),
-            ui: Some(UiComponent { position: pos, label: kind.to_string(), color: [0.5, 0.5, 0.5, 1.0] }),
-            forensic: Some(ForensicComponent { 
-                last_modified_by: "Squeezer".to_string(), 
-                timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-                hash_chain: Vec::new() 
+            dsp: Some(DspComponent {
+                params: HashMap::new(),
+                is_active: true,
+            }),
+            ui: Some(UiComponent {
+                position: pos,
+                label: kind.to_string(),
+                color: [0.5, 0.5, 0.5, 1.0],
+            }),
+            forensic: Some(ForensicComponent {
+                last_modified_by: "Squeezer".to_string(),
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                hash_chain: Vec::new(),
             }),
         };
         self.nodes.insert(id, node);

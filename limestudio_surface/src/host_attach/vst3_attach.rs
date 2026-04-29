@@ -1,11 +1,11 @@
 //! VST3 Window Attachment (The Bridge)
-//! 
+//!
 //! "Confidence is the product. Visual clarity is the weapon."
 //! DAWのウィンドウハンドル(HWND/NSView/X11)にWGPUを安全に割り込ませるための最下層ブリッジ。
 
 use raw_window_handle::{
-    RawWindowHandle, RawDisplayHandle, HasWindowHandle, HasDisplayHandle,
-    WindowHandle, DisplayHandle, HandleError,
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle,
+    RawWindowHandle, WindowHandle,
 };
 
 /// ホストから渡された生のウィンドウハンドルを保持するラッパー
@@ -34,7 +34,7 @@ pub async fn create_surface_from_host(
     // ライフタイム 'static のために、ハンドルをArc等で管理する必要がある場合がある
     // ここでは unsafe を用いて、ホストウィンドウが生きている間のみ有効なSurfaceを作成する。
     // (プラグインのUIライフサイクル管理が重要)
-    
+
     // Safety: 呼び出し側（VST3 Editor）がウィンドウの生存期間を保証する必要がある。
     unsafe {
         instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {

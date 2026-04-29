@@ -21,7 +21,7 @@ pub mod dimen {
 
 pub mod anim {
     pub const TRANSITION_MS: f32 = 60.0;
-    
+
     /// Linear Lerp for UI transitions
     pub fn lerp(current: f32, target: f32, dt: f32) -> f32 {
         let lerp_factor = dt / (TRANSITION_MS / 1000.0);
@@ -35,16 +35,16 @@ pub mod oklab {
     pub fn mix_oklab(a_hex: &str, b_hex: &str, t: f32) -> [u8; 3] {
         let a = hex_to_linear(a_hex);
         let b = hex_to_linear(b_hex);
-        
+
         let a_ok = linear_srgb_to_oklab(a);
         let b_ok = linear_srgb_to_oklab(b);
-        
+
         let mixed_ok = [
             a_ok[0] + (b_ok[0] - a_ok[0]) * t,
             a_ok[1] + (b_ok[1] - a_ok[1]) * t,
             a_ok[2] + (b_ok[2] - a_ok[2]) * t,
         ];
-        
+
         let mixed_linear = oklab_to_linear_srgb(mixed_ok);
         linear_to_srgb_bytes(mixed_linear)
     }

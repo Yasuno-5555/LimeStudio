@@ -1,19 +1,21 @@
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::collections::HashMap;
-use std::sync::Arc;
 use parking_lot::RwLock;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
 /// A wait-free bridge for streaming real-time metrics from the Audio Engine to the UI.
 /// Uses AtomicU32 with bitcasting to safely transport f32 values.
 pub struct SignalRegistry {
-    /// Registry of metrics. 
-    /// The Map itself is behind a RwLock for registration (rare), 
+    /// Registry of metrics.
+    /// The Map itself is behind a RwLock for registration (rare),
     /// but individual values are Atomic for frequent updates.
     metrics: RwLock<HashMap<String, Arc<AtomicU32>>>,
 }
 
 impl Default for SignalRegistry {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SignalRegistry {
@@ -52,7 +54,8 @@ impl SignalRegistry {
     /// For forensic batch processing: Get all metrics.
     pub fn get_all(&self) -> HashMap<String, f32> {
         let metrics = self.metrics.read();
-        metrics.iter()
+        metrics
+            .iter()
             .map(|(k, v)| (k.clone(), f32::from_bits(v.load(Ordering::Relaxed))))
             .collect()
     }

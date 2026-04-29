@@ -5,8 +5,8 @@ mod color;
 mod monitor;
 use color::Colorize;
 
-use std::process::Command;
 use limestudio_core::builder::BuildOrchestrator;
+use std::process::Command;
 
 #[derive(Subcommand)]
 pub enum NodeCommands {
@@ -25,7 +25,6 @@ pub enum GraphCommands {
 }
 
 #[derive(Parser)]
-
 #[command(author, version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
@@ -71,16 +70,37 @@ enum Commands {
         #[command(subcommand)]
         sub: GraphCommands,
     },
-    
+
     // 以下、要件見直しにより一時停止中のコマンド
+    Validate {
+        file: PathBuf,
+        #[arg(short, long)]
+        hostile: bool,
+    },
 
-    Validate { file: PathBuf, #[arg(short, long)] hostile: bool },
-
-    Diff { old: PathBuf, new: PathBuf },
-    Render { file: PathBuf, output: PathBuf, #[arg(short, long, default_value_t = 1.0)] duration: f32 },
-    Bench { file: PathBuf, #[arg(short, long, default_value_t = 64)] block_size: usize },
-    Codegen { file: PathBuf, output: Option<PathBuf> },
-    Lint { #[arg(short, long)] strict: bool },
+    Diff {
+        old: PathBuf,
+        new: PathBuf,
+    },
+    Render {
+        file: PathBuf,
+        output: PathBuf,
+        #[arg(short, long, default_value_t = 1.0)]
+        duration: f32,
+    },
+    Bench {
+        file: PathBuf,
+        #[arg(short, long, default_value_t = 64)]
+        block_size: usize,
+    },
+    Codegen {
+        file: PathBuf,
+        output: Option<PathBuf>,
+    },
+    Lint {
+        #[arg(short, long)]
+        strict: bool,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -89,8 +109,9 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Verify { file } => {
             let json = std::fs::read_to_string(&file).expect("Failed to read file");
-            let artifact: PresetArtifact = serde_json::from_str(&json).expect("Failed to parse PresetArtifact");
-            
+            let artifact: PresetArtifact =
+                serde_json::from_str(&json).expect("Failed to parse PresetArtifact");
+
             println!("Verifying Artifact: {}...", artifact.name);
             if artifact.verify() {
                 println!("{}", "VALID: Integrity check passed.".green());
@@ -105,8 +126,10 @@ fn main() -> anyhow::Result<()> {
             if strict {
                 cmd.arg("--validate-strict").arg("--strict-level").arg("10");
             }
-            
-            let status = cmd.status().map_err(|e| anyhow::anyhow!("Failed to execute pluginval: {}. Is it in your PATH?", e))?;
+
+            let status = cmd.status().map_err(|e| {
+                anyhow::anyhow!("Failed to execute pluginval: {}. Is it in your PATH?", e)
+            })?;
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(1));
             }
@@ -114,14 +137,16 @@ fn main() -> anyhow::Result<()> {
         Commands::Stress { path } => {
             println!("{}", "═══ LIME REAL-TIME STRESS HARNESS ═══".bold().red());
             println!("Target: {}", path.display());
-            
+
             println!("\n[1/3] Chaos Automation Test...");
             let mut cmd = Command::new("pluginval");
-            cmd.arg("--validate").arg(&path)
-               .arg("--validate-strict")
-               .arg("--strict-level").arg("10")
-               .arg("--test-automation"); 
-            
+            cmd.arg("--validate")
+                .arg(&path)
+                .arg("--validate-strict")
+                .arg("--strict-level")
+                .arg("10")
+                .arg("--test-automation");
+
             if !cmd.status()?.success() {
                 println!("{}", "FAILED: Chaos Automation triggered a failure.".red());
                 std::process::exit(1);
@@ -130,32 +155,54 @@ fn main() -> anyhow::Result<()> {
             println!("\n[2/3] Denormal / Zero Input Stress...");
             // pluginval doesn't have a specific "denormal" flag, but we can assume normal validation handles basic safety.
             // In a future version, we would use a custom host to feed denormals.
-            println!("{}", "  [SKIP] Custom Denormal feeder not yet implemented in CLI.".dimmed());
+            println!(
+                "{}",
+                "  [SKIP] Custom Denormal feeder not yet implemented in CLI.".dimmed()
+            );
 
             println!("\n[3/3] Thread Starvation Simulation...");
-            println!("{}", "  [SKIP] Starvation simulation requires custom host wrapper.".dimmed());
+            println!(
+                "{}",
+                "  [SKIP] Starvation simulation requires custom host wrapper.".dimmed()
+            );
 
-            println!("\n{}", "STRESS TEST COMPLETED. REALITY REMAINS STABLE.".green().bold());
+            println!(
+                "\n{}",
+                "STRESS TEST COMPLETED. REALITY REMAINS STABLE."
+                    .green()
+                    .bold()
+            );
             println!("{}", "═════════════════════════════════════".bold().red());
         }
         Commands::Testify { file } => {
             let json = std::fs::read_to_string(&file).expect("Failed to read file");
-            let artifact: PresetArtifact = serde_json::from_str(&json).expect("Failed to parse PresetArtifact");
-            
+            let artifact: PresetArtifact =
+                serde_json::from_str(&json).expect("Failed to parse PresetArtifact");
+
             println!("{}", "═══ FORENSIC TESTIMONY ═══".bold().cyan());
             println!("Artifact: {}", artifact.name);
             println!("Version:  {}", artifact.version);
             println!("Hash:     {}", artifact.hash);
-            
+
             if let Some(sh) = &artifact.source_hash {
                 println!("Source:   {}", sh);
             }
-            
-            println!("\nVerification Result: {}", if artifact.verify() { "VALID".green() } else { "TAMPERED".red() });
+
+            println!(
+                "\nVerification Result: {}",
+                if artifact.verify() {
+                    "VALID".green()
+                } else {
+                    "TAMPERED".red()
+                }
+            );
             println!("{}", "═══════════════════════════".bold().cyan());
         }
         Commands::Doctor => {
-            println!("{}", "═══ LIME SURVIVAL CONDITION CHECK ═══".bold().magenta());
+            println!(
+                "{}",
+                "═══ LIME SURVIVAL CONDITION CHECK ═══".bold().magenta()
+            );
             let mut unsafe_state = false;
 
             // 1. Tool Check: pluginval
@@ -164,7 +211,9 @@ fn main() -> anyhow::Result<()> {
                 println!("{}", "OK".green());
             } else {
                 println!("{}", "NOT FOUND (UNSAFE)".red());
-                println!("  -> Please install pluginval to enable validation: brew install pluginval");
+                println!(
+                    "  -> Please install pluginval to enable validation: brew install pluginval"
+                );
                 unsafe_state = true;
             }
 
@@ -189,7 +238,7 @@ fn main() -> anyhow::Result<()> {
                 println!("Scanning for Host environments:");
                 let daws = [
                     ("Bitwig Studio", "/Applications/Bitwig Studio.app"),
-                    ("Ableton Live", "/Applications/Ableton Live 11 Suite.app"), 
+                    ("Ableton Live", "/Applications/Ableton Live 11 Suite.app"),
                     ("Logic Pro", "/Applications/Logic Pro X.app"),
                 ];
                 for (name, path) in daws {
@@ -201,17 +250,27 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            println!("\nConclusion: {}", if unsafe_state { "UNSAFE STATE".red().bold() } else { "READY FOR PRODUCTION".green().bold() });
-            println!("{}", "══════════════════════════════════════".bold().magenta());
-            
+            println!(
+                "\nConclusion: {}",
+                if unsafe_state {
+                    "UNSAFE STATE".red().bold()
+                } else {
+                    "READY FOR PRODUCTION".green().bold()
+                }
+            );
+            println!(
+                "{}",
+                "══════════════════════════════════════".bold().magenta()
+            );
+
             if unsafe_state {
                 std::process::exit(1);
             }
         }
         Commands::Release => {
             let orchestrator = BuildOrchestrator::new(
-                "LimePlugin".to_string(), 
-                "dev.limestudio.plugin".to_string()
+                "LimePlugin".to_string(),
+                "dev.limestudio.plugin".to_string(),
             );
 
             if let Err(e) = orchestrator.run_release_build("aarch64-apple-darwin") {
@@ -224,14 +283,14 @@ fn main() -> anyhow::Result<()> {
                 let mut path = PathBuf::from("DirtyData/crates/dirtydata-runtime/src/nodes");
                 let file_name = format!("{}.rs", name.to_lowercase());
                 path.push(&file_name);
-                
+
                 if path.exists() {
                     println!("Error: Node {} already exists at {}", name, path.display());
                     return Ok(());
                 }
 
                 let template = format!(
-r#"use super::base::*;
+                    r#"use super::base::*;
 use dirtydata_core::types::ConfigSnapshot;
 
 #[derive(Clone)]
@@ -253,14 +312,23 @@ impl DspNode for {name}Node {{
         }}
     }}
 }}
-"#);
+"#
+                );
                 std::fs::write(&path, template)?;
-                println!("Scaffolded new node: {} -> {}", name.cyan(), path.display().to_string().dimmed());
+                println!(
+                    "Scaffolded new node: {} -> {}",
+                    name.as_str().cyan(),
+                    path.display().to_string().as_str().dimmed()
+                );
 
                 // Register in mod.rs (Simple append for demonstration)
-                let mut mod_path = PathBuf::from("DirtyData/crates/dirtydata-runtime/src/nodes/mod.rs");
+                let mod_path = PathBuf::from("DirtyData/crates/dirtydata-runtime/src/nodes/mod.rs");
                 let mut mod_content = std::fs::read_to_string(&mod_path)?;
-                let mod_decl = format!("\npub mod {};\npub use {}::*;\n", name.to_lowercase(), name.to_lowercase());
+                let mod_decl = format!(
+                    "\npub mod {};\npub use {}::*;\n",
+                    name.to_lowercase(),
+                    name.to_lowercase()
+                );
                 if !mod_content.contains(&format!("pub mod {}", name.to_lowercase())) {
                     mod_content.push_str(&mod_decl);
                     std::fs::write(&mod_path, mod_content)?;
@@ -292,8 +360,7 @@ impl DspNode for {name}Node {{
                 println!("Connecting to Lime Audio Engine Monitor...");
                 monitor::run_monitor()?;
             }
-
-        }
+        },
 
         _ => {
             println!("This command is temporarily disabled due to core refactoring.");

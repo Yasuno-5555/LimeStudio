@@ -32,8 +32,8 @@ impl Rect {
     pub fn intersects(&self, other: Rect) -> bool {
         let s1 = self.size * 0.5;
         let s2 = other.size * 0.5;
-        (self.center.x - other.center.x).abs() <= (s1.x + s2.x) &&
-        (self.center.y - other.center.y).abs() <= (s1.y + s2.y)
+        (self.center.x - other.center.x).abs() <= (s1.x + s2.x)
+            && (self.center.y - other.center.y).abs() <= (s1.y + s2.y)
     }
 
     pub fn contains(&self, point: Vec2) -> bool {

@@ -1,11 +1,11 @@
-use std::f64::consts::PI;
 use num_complex::Complex64;
+use std::f64::consts::PI;
 
 /// 全てのWavelet基底が実装すべきトレイト
 pub trait MotherWavelet: Send + Sync {
     /// 時間領域での値を計算 (初期化やデバッグ用)
     fn time_domain(&self, t: f64) -> Complex64;
-    
+
     /// 周波数領域での値を計算 (FFT畳み込み用)
     /// omega: 正規化角周波数 (0 ~ 2π)
     /// scale: スケールパラメータ
@@ -37,7 +37,7 @@ impl MotherWavelet for Morlet {
         let term2 = Complex64::cis(self.center_frequency * t);
         // term3: ガウス窓 e^(-t^2/2)
         let term3 = (-t * t / 2.0).exp();
-        
+
         Complex64::new(term1 * term3, 0.0) * term2
     }
 
@@ -45,16 +45,16 @@ impl MotherWavelet for Morlet {
         // フーリエ変換後のMorlet (解析解)
         // H(w) = π^(-1/4) * e^(-(w-w0)^2 / 2)
         // w = omega * scale (スケーリングされた角周波数)
-        
+
         // 注意: omegaは 0 ~ 2π (または 0 ~ π) の範囲で渡されることが多い
         // ここでは連続時間フーリエ変換の解析解を用いる
         let w = omega * scale;
         let diff = w - self.center_frequency;
-        
+
         // 正規化係数 (エネルギー保存のためにはスケールに応じた補正が必要だが、
         // MotherWavelet自体の形状定義としてはこれでよい)
         let norm = PI.powf(-0.25);
-        
+
         norm * (-0.5 * diff * diff).exp()
     }
 }

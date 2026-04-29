@@ -1,6 +1,6 @@
-use rtrb::{RingBuffer, Producer, Consumer};
-use dirtydata_core::patch::PatchSet;
 use dirtydata_core::ir::Graph;
+use dirtydata_core::patch::PatchSet;
+use rtrb::{Consumer, Producer, RingBuffer};
 use std::sync::Arc;
 
 /// UI から Engine へ送るコマンド
@@ -44,10 +44,17 @@ pub struct EngineToUiPipeline {
 pub struct PipelineFactory;
 
 impl PipelineFactory {
-    pub fn create_pair(capacity: usize) -> (UiToEnginePipeline, EngineToUiPipeline, Producer<EngineResponse>, Consumer<EngineCommand>) {
+    pub fn create_pair(
+        capacity: usize,
+    ) -> (
+        UiToEnginePipeline,
+        EngineToUiPipeline,
+        Producer<EngineResponse>,
+        Consumer<EngineCommand>,
+    ) {
         let (cmd_p, cmd_c) = RingBuffer::new(capacity);
         let (res_p, res_c) = RingBuffer::new(capacity);
-        
+
         (
             UiToEnginePipeline { producer: cmd_p },
             EngineToUiPipeline { consumer: res_c },

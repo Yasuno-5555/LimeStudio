@@ -1,6 +1,6 @@
-use std::sync::Arc;
-use ringbuf::{Producer, HeapRb};
 use num_complex::Complex64;
+use ringbuf::{HeapRb, Producer};
+use std::sync::Arc;
 
 pub trait SpectrumMonitor: Send + Sync {
     fn send_spectrum(&mut self, complex_spectrum: &[Complex64]);
@@ -22,7 +22,7 @@ impl SpectrumMonitorSender {
     }
 }
 
-// Manually implement Sync since Producer is Send but not Sync, 
+// Manually implement Sync since Producer is Send but not Sync,
 // and we only use it from the audio thread.
 unsafe impl Sync for SpectrumMonitorSender {}
 

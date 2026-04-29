@@ -1,14 +1,14 @@
+use limestudio_surface::model::stable_id::SurfaceId;
+use limestudio_surface::render::SurfaceRenderer;
+use limestudio_surface::ui_ir::{DisplaySignal, SurfaceWidget};
+use limestudio_surface::SurfaceEngine;
+use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
-use limestudio_surface::SurfaceEngine;
-use limestudio_surface::render::SurfaceRenderer;
-use limestudio_surface::ui_ir::{SurfaceWidget, DisplaySignal};
-use limestudio_surface::model::stable_id::SurfaceId;
-use std::sync::Arc;
 
 struct MirrorApp {
     window: Option<Arc<Window>>,
@@ -44,16 +44,21 @@ impl MirrorApp {
     }
 
     fn init_wgpu(&mut self, event_loop: &ActiveEventLoop) -> anyhow::Result<()> {
-        let window = Arc::new(event_loop.create_window(Window::default_attributes().with_title("LimeSurface Mirror v1.0"))?);
+        let window =
+            Arc::new(event_loop.create_window(
+                Window::default_attributes().with_title("LimeSurface Mirror v1.0"),
+            )?);
         self.window = Some(window.clone());
 
         let surface = self.instance.create_surface(window.clone())?;
-        
-        let adapter = pollster::block_on(self.instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-        })).ok_or_else(|| anyhow::anyhow!("Failed to find a suitable GPU adapter"))?;
+
+        let adapter =
+            pollster::block_on(self.instance.request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            }))
+            .ok_or_else(|| anyhow::anyhow!("Failed to find a suitable GPU adapter"))?;
 
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
@@ -67,8 +72,14 @@ impl MirrorApp {
 
         let size = window.inner_size();
         let caps = surface.get_capabilities(&adapter);
-        let format = caps.formats.first().copied().ok_or_else(|| anyhow::anyhow!("No supported surface formats"))?;
-        let config = surface.get_default_config(&adapter, size.width, size.height).ok_or_else(|| anyhow::anyhow!("Failed to get default surface config"))?;
+        let format = caps
+            .formats
+            .first()
+            .copied()
+            .ok_or_else(|| anyhow::anyhow!("No supported surface formats"))?;
+        let config = surface
+            .get_default_config(&adapter, size.width, size.height)
+            .ok_or_else(|| anyhow::anyhow!("Failed to get default surface config"))?;
         surface.configure(&device, &config);
 
         let renderer = pollster::block_on(SurfaceRenderer::new(&device, &queue, format));
@@ -82,7 +93,7 @@ impl MirrorApp {
         window.request_redraw();
 
         Ok(())
-}
+    }
 
     fn build_demo_ui(&self, t: f32) -> SurfaceWidget {
         use limestudio_surface::ui_ir::SurfaceWidget::*;
@@ -92,15 +103,24 @@ impl MirrorApp {
                 Box {
                     style: limestudio_surface::ui_ir::FrameStyle::Standard,
                     children: vec![
-                        Label { text: "LIME SURFACE MIRROR".to_string(), is_secondary: false },
-                        Label { text: format!("T: {:.2}s | Forensic Trace Active", t), is_secondary: true },
+                        Label {
+                            text: "LIME SURFACE MIRROR".to_string(),
+                            is_secondary: false,
+                        },
+                        Label {
+                            text: format!("T: {:.2}s | Forensic Trace Active", t),
+                            is_secondary: true,
+                        },
                     ],
                 },
                 Row {
                     children: vec![
                         Column {
                             children: vec![
-                                Label { text: "CONTROL RACK".to_string(), is_secondary: false },
+                                Label {
+                                    text: "CONTROL RACK".to_string(),
+                                    is_secondary: false,
+                                },
                                 Knob {
                                     id: SurfaceId::generate(),
                                     label: "CUTOFF".to_string(),
@@ -117,22 +137,35 @@ impl MirrorApp {
                                     signal: DisplaySignal::Linear(0.8),
                                     is_vertical: false,
                                 },
-                            ]
+                            ],
                         },
                         Column {
                             children: vec![
-                                Label { text: "ANALYSIS".to_string(), is_secondary: false },
+                                Label {
+                                    text: "ANALYSIS".to_string(),
+                                    is_secondary: false,
+                                },
                                 Waveform {
                                     id: "mirror_wave".to_string(),
-                                    data: (0..128).map(|i| (i as f32 * 0.2 + t * 5.0).sin() * 0.5 + (i as f32 * 0.5).sin() * 0.2).collect(),
+                                    data: (0..128)
+                                        .map(|i| {
+                                            (i as f32 * 0.2 + t * 5.0).sin() * 0.5
+                                                + (i as f32 * 0.5).sin() * 0.2
+                                        })
+                                        .collect(),
                                 },
                                 Spectrum {
                                     id: "mirror_spec".to_string(),
-                                    data: (0..64).map(|i| ((i as f32 * 0.1 - t).sin() * 0.5 + 0.5) * (1.0 - i as f32 / 64.0)).collect(),
+                                    data: (0..64)
+                                        .map(|i| {
+                                            ((i as f32 * 0.1 - t).sin() * 0.5 + 0.5)
+                                                * (1.0 - i as f32 / 64.0)
+                                        })
+                                        .collect(),
                                 },
-                            ]
-                        }
-                    ]
+                            ],
+                        },
+                    ],
                 },
                 ForensicMonitor {
                     id: SurfaceId::generate(),
@@ -143,8 +176,8 @@ impl MirrorApp {
                         has_clipped: (t * 2.0).sin() > 0.9,
                         active_voices: 1,
                     },
-                }
-            ]
+                },
+            ],
         }
     }
 }
@@ -161,12 +194,18 @@ impl ApplicationHandler for MirrorApp {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(new_size) => {
-                if let (Some(surface), Some(device), Some(config)) = (&self.surface, &self.device, &mut self.config) {
+                if let (Some(surface), Some(device), Some(config)) =
+                    (&self.surface, &self.device, &mut self.config)
+                {
                     config.width = new_size.width;
                     config.height = new_size.height;
                     surface.configure(device, config);
                     if let Some(renderer) = &mut self.renderer {
-                        renderer.typography.resize(self.queue.as_ref().unwrap(), new_size.width, new_size.height);
+                        renderer.typography.resize(
+                            self.queue.as_ref().unwrap(),
+                            new_size.width,
+                            new_size.height,
+                        );
                     }
                 }
             }
@@ -175,30 +214,54 @@ impl ApplicationHandler for MirrorApp {
             }
             WindowEvent::RedrawRequested => {
                 let t = self.start_time.elapsed().as_secs_f32();
-                
-                    let demo_ui = self.build_demo_ui(t);
 
-                    if let (Some(surface), Some(device), Some(queue), Some(renderer), Some(window)) = 
-                        (&self.surface, &self.device, &self.queue, &mut self.renderer, &self.window) 
-                    {
-                        let size = window.inner_size();
-                        let view_proj = glam::Mat4::orthographic_rh(0.0, size.width as f32, size.height as f32, 0.0, -1.0, 1.0);
+                let demo_ui = self.build_demo_ui(t);
 
-                        self.engine.sync_ui(&demo_ui);
-                        
-                        let instances = self.engine.generate_instances();
-                        let primitives = self.engine.primitive_stream.lock()
-                            .map(|guard| guard.clone())
-                            .unwrap_or_default();
+                if let (Some(surface), Some(device), Some(queue), Some(renderer), Some(window)) = (
+                    &self.surface,
+                    &self.device,
+                    &self.queue,
+                    &mut self.renderer,
+                    &self.window,
+                ) {
+                    let size = window.inner_size();
+                    let view_proj = glam::Mat4::orthographic_rh(
+                        0.0,
+                        size.width as f32,
+                        size.height as f32,
+                        0.0,
+                        -1.0,
+                        1.0,
+                    );
 
-                        if let Ok(frame) = surface.get_current_texture() {
-                            let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                            renderer.render_scene(device, queue, &view, t, view_proj, &instances, &primitives);
-                            frame.present();
-                        }
+                    self.engine.sync_ui(&demo_ui);
 
-                        window.request_redraw();
+                    let instances = self.engine.generate_instances();
+                    let primitives = self
+                        .engine
+                        .primitive_stream
+                        .lock()
+                        .map(|guard| guard.clone())
+                        .unwrap_or_default();
+
+                    if let Ok(frame) = surface.get_current_texture() {
+                        let view = frame
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+                        renderer.render_scene(
+                            device,
+                            queue,
+                            &view,
+                            t,
+                            view_proj,
+                            &instances,
+                            &primitives,
+                        );
+                        frame.present();
                     }
+
+                    window.request_redraw();
+                }
             }
             _ => (),
         }
@@ -209,9 +272,11 @@ impl ApplicationHandler for MirrorApp {
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
     println!("Launching LimeSurface Mirror...");
-    
+
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = MirrorApp::new();
-    event_loop.run_app(&mut app).map_err(|e| anyhow::anyhow!("Winit error: {:?}", e))
+    event_loop
+        .run_app(&mut app)
+        .map_err(|e| anyhow::anyhow!("Winit error: {:?}", e))
 }

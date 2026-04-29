@@ -1,11 +1,13 @@
 //! ParamKnob — The King of Widgets.
-//! 
+//!
 //! Circular/Vertical drag, Precision mode, Modulation ring, Badges, etc.
 
-use glam::Vec2;
-use crate::motion::MotionState;
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, ArcKind, TemporalStrategy, IndicatorKind, SurfaceId, ContradictionSeverity};
+use crate::motion::MotionState;
+use crate::ui_ir::{
+    ArcKind, ContradictionSeverity, IndicatorKind, SurfaceId, SurfacePrimitive, TemporalStrategy,
+};
+use glam::Vec2;
 
 pub struct KnobConfig {
     pub min: f32,
@@ -111,17 +113,27 @@ impl ParamKnob {
         if self.is_focused {
             primitives.push(SurfacePrimitive::FocusRing {
                 id: self.id,
-                rect: [self.position.x - self.radius, self.position.y - self.radius, self.radius * 2.0, self.radius * 2.0],
+                rect: [
+                    self.position.x - self.radius,
+                    self.position.y - self.radius,
+                    self.radius * 2.0,
+                    self.radius * 2.0,
+                ],
                 color: Color::ACCENT_BLUE.to_array(),
                 temporal: TemporalStrategy::Standard,
             });
         }
-        
+
         // 0.1 Contradiction Marker (The Discord)
         if let Some((severity, desc)) = &self.state.contradiction {
             primitives.push(SurfacePrimitive::ContradictionMarker {
                 id: self.id,
-                rect: [self.position.x - self.radius - 8.0, self.position.y - self.radius - 8.0, (self.radius + 8.0) * 2.0, (self.radius + 8.0) * 2.0],
+                rect: [
+                    self.position.x - self.radius - 8.0,
+                    self.position.y - self.radius - 8.0,
+                    (self.radius + 8.0) * 2.0,
+                    (self.radius + 8.0) * 2.0,
+                ],
                 severity: *severity,
                 description: desc.clone(),
             });
@@ -131,7 +143,7 @@ impl ParamKnob {
         let base_val = self.state.value.value;
         let start_angle = -140.0;
         let end_angle = -140.0 + (base_val * 280.0);
-        
+
         primitives.push(SurfacePrimitive::Arc {
             id: self.id,
             center,
@@ -148,11 +160,11 @@ impl ParamKnob {
         if (mod_val - base_val).abs() > 0.001 {
             let mod_start = end_angle;
             let mod_end = -140.0 + (mod_val * 280.0);
-            
+
             primitives.push(SurfacePrimitive::Arc {
-                id: self.id, 
+                id: self.id,
                 center,
-                radius: self.radius + 6.0, 
+                radius: self.radius + 6.0,
                 thickness: 2.0,
                 start_angle: mod_start,
                 end_angle: mod_end,
@@ -167,7 +179,11 @@ impl ParamKnob {
             rect: [center[0] - 8.0, center[1] - 8.0, 16.0, 16.0],
             kind: IndicatorKind::Led,
             value: if self.state.is_dragging { 1.0 } else { 0.5 },
-            color: if self.state.is_dragging { self.colors.active.to_array() } else { self.colors.base.to_array() },
+            color: if self.state.is_dragging {
+                self.colors.active.to_array()
+            } else {
+                self.colors.base.to_array()
+            },
             temporal: TemporalStrategy::Standard,
         });
 

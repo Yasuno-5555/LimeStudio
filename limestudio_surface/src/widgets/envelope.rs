@@ -1,6 +1,6 @@
-use glam::Vec2;
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, CurveKind, TemporalStrategy, IndicatorKind, SurfaceId};
+use crate::ui_ir::{CurveKind, IndicatorKind, SurfaceId, SurfacePrimitive, TemporalStrategy};
+use glam::Vec2;
 
 pub struct EnvelopePoint {
     pub position: Vec2, // 0.0 to 1.0
@@ -30,10 +30,22 @@ impl InteractiveEnvelope {
             position,
             size,
             points: vec![
-                EnvelopePoint { position: Vec2::new(0.0, 0.0), tension: 0.0 },
-                EnvelopePoint { position: Vec2::new(0.2, 1.0), tension: 0.0 },
-                EnvelopePoint { position: Vec2::new(0.5, 0.5), tension: 0.0 },
-                EnvelopePoint { position: Vec2::new(1.0, 0.0), tension: 0.0 },
+                EnvelopePoint {
+                    position: Vec2::new(0.0, 0.0),
+                    tension: 0.0,
+                },
+                EnvelopePoint {
+                    position: Vec2::new(0.2, 1.0),
+                    tension: 0.0,
+                },
+                EnvelopePoint {
+                    position: Vec2::new(0.5, 0.5),
+                    tension: 0.0,
+                },
+                EnvelopePoint {
+                    position: Vec2::new(1.0, 0.0),
+                    tension: 0.0,
+                },
             ],
             selected_point: None,
             colors: EnvelopeColors {
@@ -49,12 +61,16 @@ impl InteractiveEnvelope {
         let mut primitives = Vec::new();
 
         // 1. Envelope Curve
-        let curve_points: Vec<[f32; 2]> = self.points.iter().map(|p| {
-            [
-                self.position.x + p.position.x * self.size.x,
-                self.position.y + (1.0 - p.position.y) * self.size.y,
-            ]
-        }).collect();
+        let curve_points: Vec<[f32; 2]> = self
+            .points
+            .iter()
+            .map(|p| {
+                [
+                    self.position.x + p.position.x * self.size.x,
+                    self.position.y + (1.0 - p.position.y) * self.size.y,
+                ]
+            })
+            .collect();
 
         primitives.push(SurfacePrimitive::Curve {
             id: self.id,
@@ -73,7 +89,11 @@ impl InteractiveEnvelope {
                 rect: [p[0] - 4.0, p[1] - 4.0, 8.0, 8.0],
                 kind: IndicatorKind::Led,
                 value: if is_selected { 1.0 } else { 0.5 },
-                color: if is_selected { self.colors.selection.to_array() } else { self.colors.point.to_array() },
+                color: if is_selected {
+                    self.colors.selection.to_array()
+                } else {
+                    self.colors.point.to_array()
+                },
                 temporal: TemporalStrategy::Fast,
             });
         }

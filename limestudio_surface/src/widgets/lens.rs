@@ -1,11 +1,11 @@
 //! Compiler Lens Overlay — Invisible logic made visible.
-//! 
+//!
 //! ノードの上に浮かび上がる IR / Rust 命令。
 //! 信頼と教育のためのオーバーレイ。
 
-use glam::Vec2;
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, FrameStyle, TemporalStrategy, GlyphPlacement, SurfaceId};
+use crate::ui_ir::{FrameStyle, GlyphPlacement, SurfaceId, SurfacePrimitive, TemporalStrategy};
+use glam::Vec2;
 
 pub struct CompilerLensOverlay {
     pub id: SurfaceId,

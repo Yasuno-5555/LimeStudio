@@ -1,7 +1,7 @@
-use glam::Vec2;
-use crate::motion::MotionState;
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, TemporalStrategy, FrameStyle, IndicatorKind, SurfaceId};
+use crate::motion::MotionState;
+use crate::ui_ir::{FrameStyle, IndicatorKind, SurfaceId, SurfacePrimitive, TemporalStrategy};
+use glam::Vec2;
 
 pub struct ParamSlider {
     pub id: SurfaceId,
@@ -24,13 +24,23 @@ pub struct SliderColors {
 }
 
 impl ParamSlider {
-    pub fn new(id: SurfaceId, param_id: String, label: String, position: Vec2, is_vertical: bool) -> Self {
+    pub fn new(
+        id: SurfaceId,
+        param_id: String,
+        label: String,
+        position: Vec2,
+        is_vertical: bool,
+    ) -> Self {
         Self {
             id,
             param_id,
             label,
             position,
-            size: if is_vertical { Vec2::new(24.0, 128.0) } else { Vec2::new(128.0, 24.0) }, // 8px grid
+            size: if is_vertical {
+                Vec2::new(24.0, 128.0)
+            } else {
+                Vec2::new(128.0, 24.0)
+            }, // 8px grid
             value: MotionState::new(0.5),
             min: 0.0,
             max: 1.0,
@@ -51,12 +61,17 @@ impl ParamSlider {
         if self.is_focused {
             primitives.push(SurfacePrimitive::FocusRing {
                 id: self.id,
-                rect: [self.position.x - 4.0, self.position.y - 4.0, self.size.x + 8.0, self.size.y + 8.0],
+                rect: [
+                    self.position.x - 4.0,
+                    self.position.y - 4.0,
+                    self.size.x + 8.0,
+                    self.size.y + 8.0,
+                ],
                 color: Color::ACCENT_BLUE.to_array(),
                 temporal: TemporalStrategy::Standard,
             });
         }
-        
+
         // 1. Track (Frame)
         primitives.push(SurfacePrimitive::Frame {
             id: self.id,
@@ -69,9 +84,19 @@ impl ParamSlider {
         // 2. Active Range (Indicator or another Frame)
         let val = self.value.value;
         let active_rect = if self.is_vertical {
-            [self.position.x, self.position.y + self.size.y * (1.0 - val), self.size.x, self.size.y * val]
+            [
+                self.position.x,
+                self.position.y + self.size.y * (1.0 - val),
+                self.size.x,
+                self.size.y * val,
+            ]
         } else {
-            [self.position.x, self.position.y, self.size.x * val, self.size.y]
+            [
+                self.position.x,
+                self.position.y,
+                self.size.x * val,
+                self.size.y,
+            ]
         };
 
         primitives.push(SurfacePrimitive::Indicator {
@@ -85,9 +110,19 @@ impl ParamSlider {
 
         // 3. Handle (Indicator - Radio style)
         let handle_pos = if self.is_vertical {
-            [self.position.x, self.position.y + self.size.y * (1.0 - val) - 4.0, self.size.x, 8.0]
+            [
+                self.position.x,
+                self.position.y + self.size.y * (1.0 - val) - 4.0,
+                self.size.x,
+                8.0,
+            ]
         } else {
-            [self.position.x + self.size.x * val - 4.0, self.position.y, 8.0, self.size.y]
+            [
+                self.position.x + self.size.x * val - 4.0,
+                self.position.y,
+                8.0,
+                self.size.y,
+            ]
         };
 
         primitives.push(SurfacePrimitive::Indicator {

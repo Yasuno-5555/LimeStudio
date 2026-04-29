@@ -1,6 +1,6 @@
-use glam::Vec2;
-use crate::model::geometry::{Rect, Circle, Segment};
+use crate::model::geometry::{Circle, Rect, Segment};
 use crate::model::stable_id::SurfaceId;
+use glam::Vec2;
 
 /// Result of a hit test operation.
 #[derive(Debug, Clone, Copy)]
@@ -11,7 +11,6 @@ pub enum HitResult {
     Cable(SurfaceId),
     Widget(SurfaceId, Vec2), // Local position within widget
 }
-
 
 pub struct HitTester;
 
@@ -28,7 +27,11 @@ impl HitTester {
     }
 
     /// Find a port at the given world position with a specific snap radius.
-    pub fn hit_test_ports(ports: &[(SurfaceId, Circle)], point: Vec2, snap_radius: f32) -> Option<SurfaceId> {
+    pub fn hit_test_ports(
+        ports: &[(SurfaceId, Circle)],
+        point: Vec2,
+        snap_radius: f32,
+    ) -> Option<SurfaceId> {
         let mut best_id = None;
         let mut min_dist = snap_radius;
 
@@ -43,7 +46,11 @@ impl HitTester {
     }
 
     /// Find a cable at the given world position.
-    pub fn hit_test_cables(cables: &[(SurfaceId, Segment)], point: Vec2, threshold: f32) -> Option<SurfaceId> {
+    pub fn hit_test_cables(
+        cables: &[(SurfaceId, Segment)],
+        point: Vec2,
+        threshold: f32,
+    ) -> Option<SurfaceId> {
         for (id, segment) in cables {
             if segment.distance_to_point(point) < threshold {
                 return Some(*id);

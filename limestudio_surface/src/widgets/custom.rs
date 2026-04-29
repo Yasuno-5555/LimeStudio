@@ -1,10 +1,15 @@
-use crate::ui_ir::{SurfacePrimitive, ArcKind, TemporalStrategy};
 use crate::model::stable_id::SurfaceId;
+use crate::ui_ir::{ArcKind, SurfacePrimitive, TemporalStrategy};
 
 pub struct CustomWidget;
 
 impl CustomWidget {
-    pub fn modulation_arc(id: SurfaceId, center: [f32; 2], radius: f32, value: f32) -> SurfacePrimitive {
+    pub fn modulation_arc(
+        id: SurfaceId,
+        center: [f32; 2],
+        radius: f32,
+        value: f32,
+    ) -> SurfacePrimitive {
         SurfacePrimitive::Arc {
             id,
             center,

@@ -1,9 +1,9 @@
 //! Compiler Lens & Inspector — Visible Intelligence.
-//! 
+//!
 //! Real-time visualization of the compilation process and validation.
 
-use serde::{Serialize, Deserialize};
 use limestudio_core::UiIndex;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompilerLens {
@@ -29,7 +29,9 @@ pub struct InspectorState {
 }
 
 impl Default for InspectorState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl InspectorState {
     pub fn new() -> Self {

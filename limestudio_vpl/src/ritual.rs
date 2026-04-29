@@ -1,5 +1,5 @@
-use eframe::egui;
 use crate::style::colors;
+use eframe::egui;
 
 pub enum RitualStep {
     Verify,
@@ -15,7 +15,9 @@ pub struct ShipRitual {
 }
 
 impl Default for ShipRitual {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl ShipRitual {
     pub fn new() -> Self {
@@ -57,7 +59,11 @@ impl ShipRitual {
                 }
             }
             RitualStep::Done => {
-                ui.label(egui::RichText::new("CEREMONY COMPLETE").color(egui::Color32::from_hex(colors::CALM_LIME).unwrap()).strong());
+                ui.label(
+                    egui::RichText::new("CEREMONY COMPLETE")
+                        .color(egui::Color32::from_hex(colors::CALM_LIME).unwrap())
+                        .strong(),
+                );
                 ui.label("The artifact has been sealed and is ready for distribution.");
             }
         }

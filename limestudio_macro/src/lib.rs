@@ -1,7 +1,11 @@
 extern crate proc_macro;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, parse::{Parse, ParseStream}, Token, Result, Ident, LitStr, bracketed, Block};
+use syn::{
+    bracketed,
+    parse::{Parse, ParseStream},
+    parse_macro_input, Block, Ident, LitStr, Result, Token,
+};
 
 struct PluginDefinition {
     name: String,
@@ -70,7 +74,7 @@ impl Parse for PluginDefinition {
                         let p_ty: Ident = content.parse()?;
                         content.parse::<Token![=]>()?;
                         let p_default: syn::LitFloat = content.parse()?;
-                        
+
                         let range_content;
                         bracketed!(range_content in content);
                         let start: syn::LitFloat = range_content.parse()?;
@@ -83,7 +87,7 @@ impl Parse for PluginDefinition {
                             default: p_default.base10_parse()?,
                             range: (start.base10_parse()?, end.base10_parse()?),
                         });
-                        
+
                         if content.peek(Token![,]) {
                             content.parse::<Token![,]>()?;
                         }
@@ -103,7 +107,12 @@ impl Parse for PluginDefinition {
                     ui_param_name = Some(p);
                     ui_body = Some(input.parse()?);
                 }
-                _ => return Err(syn::Error::new(key.span(), format!("Unknown key in plugin!: {}", key))),
+                _ => {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        format!("Unknown key in plugin!: {}", key),
+                    ))
+                }
             }
 
             if input.peek(Token![,]) {
@@ -117,9 +126,11 @@ impl Parse for PluginDefinition {
             state_version,
             migrations,
             params,
-            dsp_param_name: dsp_param_name.ok_or_else(|| syn::Error::new(input.span(), "Missing dsp block"))?,
+            dsp_param_name: dsp_param_name
+                .ok_or_else(|| syn::Error::new(input.span(), "Missing dsp block"))?,
             dsp_body: dsp_body.ok_or_else(|| syn::Error::new(input.span(), "Missing dsp body"))?,
-            ui_param_name: ui_param_name.ok_or_else(|| syn::Error::new(input.span(), "Missing ui block"))?,
+            ui_param_name: ui_param_name
+                .ok_or_else(|| syn::Error::new(input.span(), "Missing ui block"))?,
             ui_body: ui_body.ok_or_else(|| syn::Error::new(input.span(), "Missing ui body"))?,
         })
     }
@@ -128,20 +139,20 @@ impl Parse for PluginDefinition {
 #[proc_macro]
 pub fn plugin(input: TokenStream) -> TokenStream {
     let def = parse_macro_input!(input as PluginDefinition);
-    
+
     let plugin_name_ident = quote::format_ident!("{}", def.name.replace(" ", ""));
     let params_struct_ident = quote::format_ident!("{}Params", plugin_name_ident);
     let ui_params_struct_ident = quote::format_ident!("{}UiParams", plugin_name_ident);
-    
+
     let param_fields = def.params.iter().map(|p| {
         let name = &p.name;
         let name_str = name.to_string();
-        quote! { 
+        quote! {
             #[id = #name_str]
-            pub #name: FloatParam 
+            pub #name: FloatParam
         }
     });
-    
+
     let param_init = def.params.iter().map(|p| {
         let name = &p.name;
         let label = name.to_string();
@@ -164,11 +175,11 @@ pub fn plugin(input: TokenStream) -> TokenStream {
     let ui_param_init = def.params.iter().map(|p| {
         let name = &p.name;
         let name_str = name.to_string();
-        quote! { 
-            #name: UiParam { 
-                id: #name_str, 
-                param: &params.#name 
-            } 
+        quote! {
+            #name: UiParam {
+                id: #name_str,
+                param: &params.#name
+            }
         }
     });
 
@@ -299,7 +310,7 @@ pub fn plugin(input: TokenStream) -> TokenStream {
                         let b = builder.borrow();
                         (b.input_node(), b.output_node())
                     };
-                    
+
                     let input = Chainable {
                         current_node: input_node,
                         builder: builder,
@@ -400,7 +411,7 @@ pub fn plugin(input: TokenStream) -> TokenStream {
             nih_export_vst3!(limestudio_plugin::LimeAdapter<#plugin_name_ident>);
             nih_export_clap!(limestudio_plugin::LimeAdapter<#plugin_name_ident>);
         }
-        
+
         pub use #internal_mod_name::#plugin_name_ident;
     };
 

@@ -1,5 +1,5 @@
-use nih_plug::prelude::*;
 use limestudio_dsp::wrapper::WaveletEngineWrapper;
+use nih_plug::prelude::*;
 use std::sync::Arc;
 
 mod editor;
@@ -8,10 +8,10 @@ use editor::default_state;
 
 pub struct BasicThru {
     params: Arc<BasicThruParams>,
-    
+
     // DSP Engine
     engine: Option<WaveletEngineWrapper>,
-    
+
     // Sample Rate
     sample_rate: f32,
 }
@@ -34,7 +34,7 @@ pub struct BasicThruParams {
 
     #[id = "gain_0"]
     pub gain_0: FloatParam,
-    
+
     #[id = "gain_1"]
     pub gain_1: FloatParam,
 
@@ -51,12 +51,8 @@ pub struct BasicThruParams {
 impl Default for BasicThruParams {
     fn default() -> Self {
         fn make_gain(name: &str) -> FloatParam {
-            FloatParam::new(
-                name,
-                1.0,
-                FloatRange::Linear { min: 0.0, max: 2.0 },
-            )
-            .with_smoother(SmoothingStyle::Linear(50.0))
+            FloatParam::new(name, 1.0, FloatRange::Linear { min: 0.0, max: 2.0 })
+                .with_smoother(SmoothingStyle::Linear(50.0))
         }
 
         Self {
@@ -79,13 +75,11 @@ impl Plugin for BasicThru {
     const VERSION: &'static str = "0.1.0";
 
     // Audio I/O
-    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[
-        AudioIOLayout {
-            main_input_channels: NonZeroU32::new(2),
-            main_output_channels: NonZeroU32::new(2),
-            ..AudioIOLayout::const_default()
-        },
-    ];
+    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[AudioIOLayout {
+        main_input_channels: NonZeroU32::new(2),
+        main_output_channels: NonZeroU32::new(2),
+        ..AudioIOLayout::const_default()
+    }];
 
     const MIDI_INPUT: MidiConfig = MidiConfig::None;
     const SAMPLE_ACCURATE_AUTOMATION: bool = true;
@@ -96,7 +90,7 @@ impl Plugin for BasicThru {
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
     }
-    
+
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
         // Monitor Consumer needs to be created fresh each time editor is opened
         let consumer = self.engine.as_mut().and_then(|e| e.attach_monitor());
@@ -115,7 +109,7 @@ impl Plugin for BasicThru {
         _context: &mut impl InitContext<Self>,
     ) -> bool {
         self.sample_rate = buffer_config.sample_rate;
-        
+
         // Waveletエンジンの初期化
         let engine = WaveletEngineWrapper::new(self.sample_rate as f64, 5); // 5 scales
 
@@ -126,14 +120,19 @@ impl Plugin for BasicThru {
         // `context` is passed to `process`.
         // However, `nih_plug` handles latency reporting via `context.set_latency_samples` in `process`.
         // We ensure we call it in the first process call or whenever it changes.
-        
+
         // Note: Monitor creation is deferred to editor() call.
 
         self.engine = Some(engine);
         true
     }
 
-    fn process(&mut self, buffer: &mut Buffer, _aux: &mut AuxiliaryBuffers, context: &mut impl nih_plug::prelude::ProcessContext<Self>) -> ProcessStatus {
+    fn process(
+        &mut self,
+        buffer: &mut Buffer,
+        _aux: &mut AuxiliaryBuffers,
+        context: &mut impl nih_plug::prelude::ProcessContext<Self>,
+    ) -> ProcessStatus {
         if let Some(engine) = &mut self.engine {
             // レイテンシ報告 (一度だけで良いが、毎回呼んでもコストは低い)
             // 変更があった場合のみ呼ぶのがベストだが、ここではシンプルに。
@@ -148,13 +147,13 @@ impl Plugin for BasicThru {
 
             // 処理
             let slices = buffer.as_slice();
-            
+
             // Channel 0 (Left)
             if !slices.is_empty() {
                 // slices[0] is channel 0 data
                 let input = slices[0].to_vec();
                 engine.process(&input, slices[0]);
-                
+
                 // Copy to Right channel if exists (Mono to Stereo Thru)
                 if slices.len() > 1 {
                     // Simple logic: if stereo out, copy L to R
@@ -171,10 +170,8 @@ impl Plugin for BasicThru {
 // エクスポート
 impl Vst3Plugin for BasicThru {
     const VST3_CLASS_ID: [u8; 16] = *b"LimestudioThru01";
-    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
-        Vst3SubCategory::Fx,
-        Vst3SubCategory::Tools,
-    ];
+    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
+        &[Vst3SubCategory::Fx, Vst3SubCategory::Tools];
 }
 
 impl ClapPlugin for BasicThru {

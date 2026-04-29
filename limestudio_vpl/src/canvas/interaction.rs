@@ -7,7 +7,9 @@ pub struct CanvasState {
 }
 
 impl Default for CanvasState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CanvasState {

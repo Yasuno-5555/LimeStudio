@@ -1,7 +1,7 @@
 //! Surface UI IR - Minimal structure for reactive reconciliation.
 //! "Observation is a pure function. Reality is the state."
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 pub use crate::model::stable_id::SurfaceId;
 
@@ -50,7 +50,7 @@ pub enum SurfaceWidget {
         nodes: Vec<TreeNode>,
     },
     Column {
-        children: Vec<SurfaceWidget>
+        children: Vec<SurfaceWidget>,
     },
     Terminal {
         id: SurfaceId,
@@ -58,7 +58,7 @@ pub enum SurfaceWidget {
         current_input: String,
     },
     Row {
-        children: Vec<SurfaceWidget>
+        children: Vec<SurfaceWidget>,
     },
     Box {
         children: Vec<SurfaceWidget>,
@@ -97,7 +97,6 @@ pub enum SurfaceWidget {
         data: Vec<f32>,
     },
     CodeView {
-
         code: String,
         language: String,
     },
@@ -158,8 +157,6 @@ impl SurfaceWidget {
         }
     }
 }
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SurfacePrimitive {
@@ -340,8 +337,16 @@ pub struct TreeNode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DiffChange {
-    Property { name: String, old: String, new: String },
-    Causal { source: SurfaceId, target: SurfaceId, action: CausalAction },
+    Property {
+        name: String,
+        old: String,
+        new: String,
+    },
+    Causal {
+        source: SurfaceId,
+        target: SurfaceId,
+        action: CausalAction,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -414,14 +419,13 @@ pub enum TemporalStrategy {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FrameStyle {
-
     Standard, // Pd Object
     Message,  // Pd Message (Flag)
     Number,   // Pd Number (Chamfered)
     Field,    // Edit mode
     None,     // Comment
     /// AuthorityGlass: PRIVILEGED. Authority Drawer / Forensic Panels ONLY.
-    AuthorityGlass, 
+    AuthorityGlass,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -483,4 +487,3 @@ pub struct TelemetryData {
     pub has_nan: bool,
     pub active_voices: usize,
 }
-

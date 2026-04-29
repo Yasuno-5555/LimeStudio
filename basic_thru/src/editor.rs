@@ -11,7 +11,8 @@ pub struct _EditorState {
     // ViziaのEventLoop内でこれをポーリングして描画データを更新する想定
     // Mutexでラップしているのは、Optionを取り出すときや移動時のため（基本は単一スレッドアクセスだがViziaStateの制約）
     #[allow(clippy::type_complexity)]
-    pub monitor_consumer: Arc<Mutex<Option<ringbuf::Consumer<Vec<f32>, Arc<ringbuf::HeapRb<Vec<f32>>>>>>>,
+    pub monitor_consumer:
+        Arc<Mutex<Option<ringbuf::Consumer<Vec<f32>, Arc<ringbuf::HeapRb<Vec<f32>>>>>>>,
 }
 
 pub(crate) fn default_state() -> Arc<ViziaState> {
@@ -26,12 +27,11 @@ pub(crate) fn create_editor(
     monitor_consumer: Option<ringbuf::Consumer<Vec<f32>, Arc<ringbuf::HeapRb<Vec<f32>>>>>,
     editor_state: Arc<ViziaState>,
 ) -> Option<Box<dyn Editor>> {
-    
     let consumer_cell = Mutex::new(monitor_consumer);
 
     create_vizia_editor(editor_state, ViziaTheming::Custom, move |cx, _| {
         // Assets or Fonts setup if needed
-        
+
         let consumer = consumer_cell.lock().unwrap().take();
 
         // Basic Layout
@@ -52,20 +52,19 @@ pub(crate) fn create_editor(
                     .height(Stretch(1.0))
                     .background_color(Color::rgb(20, 20, 20));
             }
-                
+
             // Controls Area
             HStack::new(cx, |cx| {
                 // Setup sliders
                 let make_slider = |cx: &mut Context, label: &str| {
                     VStack::new(cx, |cx| {
-                        Label::new(cx, label)
-                            .font_size(12.0)
-                            .color(Color::white());
+                        Label::new(cx, label).font_size(12.0).color(Color::white());
                         // ParamSlider::new(cx, Data::new(params.as_ref()), lens);
                         Label::new(cx, "Slider Placeholder");
                     })
                     .width(Stretch(1.0))
-                    .child_left(Stretch(1.0)).child_right(Stretch(1.0)); // Center content
+                    .child_left(Stretch(1.0))
+                    .child_right(Stretch(1.0)); // Center content
                 };
 
                 make_slider(cx, "Low");
@@ -76,10 +75,11 @@ pub(crate) fn create_editor(
             })
             .height(Pixels(100.0))
             .col_between(Pixels(10.0))
-            .child_top(Pixels(10.0)).child_bottom(Pixels(10.0));
-                
+            .child_top(Pixels(10.0))
+            .child_bottom(Pixels(10.0));
         })
         .row_between(Pixels(10.0))
-        .child_left(Stretch(1.0)).child_right(Stretch(1.0));
+        .child_left(Stretch(1.0))
+        .child_right(Stretch(1.0));
     })
 }

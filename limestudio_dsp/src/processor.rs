@@ -1,19 +1,19 @@
-use rustfft::{Fft, FftPlanner};
+use crate::wavelets::MotherWavelet;
 use num_complex::{Complex, Complex64};
-use std::sync::Arc;
 use rayon::prelude::*;
 use rustfft::num_traits::Zero;
-use crate::wavelets::MotherWavelet;
+use rustfft::{Fft, FftPlanner};
+use std::sync::Arc;
 
 /// 1. Analysis Stage: 入力のFFTを担当 (Stateless-ish)
 pub struct SpectralAnalyzer {
     fft: Arc<dyn Fft<f64>>,
     fft_size: usize,
-    
+
     // Scratch & Output (Reuse allocation)
     fft_input: Vec<Complex64>,
     fft_scratch: Vec<Complex64>,
-    
+
     // Window function
     window: Vec<f64>,
 }
@@ -21,11 +21,14 @@ pub struct SpectralAnalyzer {
 impl SpectralAnalyzer {
     pub fn new(fft_size: usize, _hop_size: usize, planner: &mut FftPlanner<f64>) -> Self {
         let fft = planner.plan_fft_forward(fft_size);
-        
+
         // Hann window
-        let window = (0..fft_size).map(|i| {
-            0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / (fft_size as f64 - 1.0)).cos())
-        }).collect();
+        let window = (0..fft_size)
+            .map(|i| {
+                0.5 * (1.0
+                    - (2.0 * std::f64::consts::PI * i as f64 / (fft_size as f64 - 1.0)).cos())
+            })
+            .collect();
 
         Self {
             fft,
@@ -40,7 +43,7 @@ impl SpectralAnalyzer {
     pub fn compute_spectrum(&mut self, input: &[f32]) -> &[Complex64] {
         // Assert input length?
         let len = input.len().min(self.fft_size);
-        
+
         // Windowing & Copy
         for (i, val) in input.iter().enumerate().take(len) {
             self.fft_input[i] = Complex::new(*val as f64 * self.window[i], 0.0);
@@ -50,33 +53,38 @@ impl SpectralAnalyzer {
         }
 
         // FFT
-        self.fft.process_with_scratch(&mut self.fft_input, &mut self.fft_scratch);
+        self.fft
+            .process_with_scratch(&mut self.fft_input, &mut self.fft_scratch);
 
         &self.fft_input
     }
 }
 
-
 /// 2. Synthesis Stage: 特定のスケールの再構成 (IFFT) を担当 (No OLA, just IFFT block)
 pub struct ScaleSynthesizer {
     ifft: Arc<dyn Fft<f64>>,
     fft_size: usize,
-    
+
     // Wavelet Kernel
     pub kernel: Vec<Complex64>,
-    
+
     // Scratch
     ifft_buffer: Vec<Complex64>,
     ifft_scratch: Vec<Complex64>,
-    
+
     // Output Buffer (Reused)
     pub time_output: Vec<f32>,
 }
 
 impl ScaleSynthesizer {
-    pub fn new(fft_size: usize, _hop_size: usize, planner: &mut FftPlanner<f64>, kernel: Vec<Complex64>) -> Self {
+    pub fn new(
+        fft_size: usize,
+        _hop_size: usize,
+        planner: &mut FftPlanner<f64>,
+        kernel: Vec<Complex64>,
+    ) -> Self {
         let ifft = planner.plan_fft_inverse(fft_size);
-        
+
         Self {
             ifft,
             fft_size,
@@ -95,32 +103,33 @@ impl ScaleSynthesizer {
         }
 
         // 2. IFFT
-        self.ifft.process_with_scratch(&mut self.ifft_buffer, &mut self.ifft_scratch);
+        self.ifft
+            .process_with_scratch(&mut self.ifft_buffer, &mut self.ifft_scratch);
 
         // 3. Convert to Real
-        let scale = 1.0 / self.fft_size as f64; 
-        
+        let scale = 1.0 / self.fft_size as f64;
+
         for i in 0..self.fft_size {
             self.time_output[i] = (self.ifft_buffer[i].re * scale) as f32;
         }
     }
 }
 
-use crate::utils::Smoother;
 use crate::monitor::SpectrumMonitor;
+use crate::utils::Smoother;
 
 /// Main Processor (Block based)
 pub struct WaveletProcessor {
     analyzer: SpectralAnalyzer,
     synthesizers: Vec<ScaleSynthesizer>,
-    
+
     // Parameters
     _scales: Vec<f64>,
     smoothers: Vec<Smoother>,
-    
+
     // Visualizer
     monitor_sender: Option<Box<dyn SpectrumMonitor>>,
-    
+
     fft_size: usize,
     hop_size: usize,
     _sample_rate: f64,
@@ -132,16 +141,16 @@ impl WaveletProcessor {
         fft_size: usize,
         hop_size: usize,
         num_scales: usize,
-        mother_wavelet: &W
+        mother_wavelet: &W,
     ) -> Self {
         let mut planner = FftPlanner::new();
         let analyzer = SpectralAnalyzer::new(fft_size, hop_size, &mut planner);
-        
+
         // Scale Setup
         let min_freq = 20.0;
         let max_freq = sample_rate / 2.0;
         let mut scales = Vec::with_capacity(num_scales);
-        
+
         for i in 0..num_scales {
             let p = i as f64 / (num_scales - 1) as f64;
             let freq = max_freq * (min_freq / max_freq).powf(p);
@@ -154,9 +163,9 @@ impl WaveletProcessor {
 
         for scale_freq in scales.iter().take(num_scales) {
             let freq_target = *scale_freq;
-            let w0 = 6.0; 
+            let w0 = 6.0;
             let scale = w0 / (2.0 * std::f64::consts::PI * freq_target / sample_rate);
-            
+
             let mut kernel = vec![Complex64::zero(); fft_size];
             for k in 0..fft_size {
                 let omega = if k <= fft_size / 2 {
@@ -164,10 +173,10 @@ impl WaveletProcessor {
                 } else {
                     (k as f64 - fft_size as f64) / fft_size as f64 * 2.0 * std::f64::consts::PI
                 };
-                
-                let amp = mother_wavelet.frequency_domain(omega, scale); 
+
+                let amp = mother_wavelet.frequency_domain(omega, scale);
                 kernel[k] = Complex64::new(amp, 0.0);
-                freq_sum[k] += amp; 
+                freq_sum[k] += amp;
             }
             kernels.push(kernel);
         }
@@ -182,10 +191,11 @@ impl WaveletProcessor {
             }
         }
 
-        let synthesizers = kernels.into_iter()
+        let synthesizers = kernels
+            .into_iter()
             .map(|k| ScaleSynthesizer::new(fft_size, hop_size, &mut planner, k))
             .collect();
-            
+
         // Initialize smoothers with 1.0 (Unity Gain)
         // Ramp time: 20ms typically good for gain
         let smoothers = (0..num_scales)
@@ -209,15 +219,15 @@ impl WaveletProcessor {
             self.smoothers[scale_idx].set_target(gain as f32);
         }
     }
-    
+
     pub fn set_monitor(&mut self, sender: Box<dyn SpectrumMonitor>) {
         self.monitor_sender = Some(sender);
     }
-    
+
     pub fn latency(&self) -> u32 {
         (self.fft_size - self.hop_size) as u32
     }
-    
+
     /// 固定長の入力ブロック処理し、固定長の出力ブロックを返す (OLAなし)
     /// input: equal to fft_size
     /// output: equal to fft_size (caller must size it correctly)
@@ -229,15 +239,14 @@ impl WaveletProcessor {
         // Collect current gains from smoothers
         // Note: Smoother operates on block rate, so we call next() once per block.
         // We collect gains into a temporary vector to pass to par_iter
-        
-        let current_gains: Vec<f64> = self.smoothers.iter_mut()
-            .map(|s| s.tick() as f64)
-            .collect();
+
+        let current_gains: Vec<f64> = self.smoothers.iter_mut().map(|s| s.tick() as f64).collect();
 
         let synthesizers = &mut self.synthesizers;
-        
+
         // Compute IFFT in parallel, storing results in each synthesizer's `time_output`
-        synthesizers.par_iter_mut()
+        synthesizers
+            .par_iter_mut()
             .zip(current_gains.par_iter())
             .for_each(|(synth, &g)| {
                 synth.compute_block(&spectrum, g);
@@ -250,7 +259,7 @@ impl WaveletProcessor {
 
         // 4. Integration (Summation)
         output.fill(0.0);
-        
+
         for synth in synthesizers.iter() {
             for (i, val) in synth.time_output.iter().enumerate() {
                 if i < output.len() {
@@ -260,4 +269,3 @@ impl WaveletProcessor {
         }
     }
 }
-

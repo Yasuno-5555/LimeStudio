@@ -21,7 +21,7 @@ impl NodeLayout {
         let char_width = 8.0;
         let base_width = (name.len() as f32 * char_width) + (Self::PADDING * 2.0);
         let width = Self::snap(base_width).max(Self::DEFAULT_WIDTH);
-        
+
         [0.0, 0.0, width, Self::DEFAULT_HEIGHT]
     }
 
@@ -35,15 +35,15 @@ impl NodeLayout {
     ) -> [f32; 2] {
         let width = node_rect[2];
         let height = node_rect[3];
-        
+
         let x_offset = if num_ports == 1 {
             width / 2.0
         } else {
             (port_index as f32 / (num_ports - 1) as f32) * width
         };
-        
+
         let y_offset = if is_input { 0.0 } else { height };
-        
+
         [node_pos[0] + x_offset, node_pos[1] + y_offset]
     }
 }

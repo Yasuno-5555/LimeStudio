@@ -1,9 +1,9 @@
 //! Diagnostic Vascular System - 「Realityを安全に観測するための血管系」
-//! 
+//!
 //! SPSC (Single-Producer, Single-Consumer) を用い、
 //! オーディオスレッドからUIスレッドへ診断データをWait-Freeに転送します。
 
-use rtrb::{Producer, Consumer, RingBuffer};
+use rtrb::{Consumer, Producer, RingBuffer};
 
 /// Spectrum表示用のビン数（対数スケールバケット）
 pub const SPECTRUM_BINS: usize = 128;
@@ -23,7 +23,10 @@ pub enum ObservationEvent {
     /// CPU負荷やスレッドのジッター状況
     PerfStats { cpu_usage: f32, jitter_ms: f32 },
     /// 特定ノードのデバッグメッセージ
-    Trace { node_id: &'static str, message: String },
+    Trace {
+        node_id: &'static str,
+        message: String,
+    },
 }
 
 /// オーディオスレッド側：データを「血管」に流し込む
@@ -93,7 +96,7 @@ impl PeakMonitor {
         self.left_max = self.left_max.max(left.abs());
         self.right_max = self.right_max.max(right.abs());
         self.count += 1;
-        
+
         if self.count >= self.interval {
             producer.emit(ObservationEvent::Peak {
                 left: self.left_max,

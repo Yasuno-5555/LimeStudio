@@ -9,7 +9,11 @@ pub struct AppleConnectClient {
 
 impl AppleConnectClient {
     pub fn new(key_id: String, issuer_id: String, private_key_path: std::path::PathBuf) -> Self {
-        Self { key_id, issuer_id, private_key_path }
+        Self {
+            key_id,
+            issuer_id,
+            private_key_path,
+        }
     }
 
     pub fn fetch_certificates(&self, is_ios: bool) -> Result<String> {
@@ -25,7 +29,10 @@ impl AppleConnectClient {
 
     pub fn sync_provisioning_profiles(&self, bundle_id: &str, is_ios: bool) -> Result<()> {
         let platform = if is_ios { "iOS" } else { "macOS" };
-        println!("  [AUTO] App Store Connect: Syncing {} profiles for {}...", platform, bundle_id);
+        println!(
+            "  [AUTO] App Store Connect: Syncing {} profiles for {}...",
+            platform, bundle_id
+        );
         Ok(())
     }
 }

@@ -1,16 +1,16 @@
 //! Standalone Verification Tool (The Mirror)
-//! 
+//!
 //! "standalone = 開発者のための鏡。ここで映らなければ、DAWでも映らない。"
 
+use crate::render::SurfaceRenderer;
+use crate::SurfaceEngine;
+use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
-use crate::SurfaceEngine;
-use crate::render::SurfaceRenderer;
-use std::sync::Arc;
 
 struct App {
     window: Option<Arc<Window>>,
@@ -48,7 +48,6 @@ impl App {
     }
 }
 
-
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let Err(e) = self.init_wgpu(event_loop) {
@@ -61,12 +60,18 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(new_size) => {
-                if let (Some(surface), Some(device), Some(config)) = (&self.surface, &self.device, &mut self.config) {
+                if let (Some(surface), Some(device), Some(config)) =
+                    (&self.surface, &self.device, &mut self.config)
+                {
                     config.width = new_size.width;
                     config.height = new_size.height;
                     surface.configure(device, config);
                     if let Some(renderer) = &mut self.renderer {
-                        renderer.typography.resize(self.queue.as_ref().unwrap(), new_size.width, new_size.height);
+                        renderer.typography.resize(
+                            self.queue.as_ref().unwrap(),
+                            new_size.width,
+                            new_size.height,
+                        );
                     }
                 }
             }
@@ -123,61 +128,92 @@ impl ApplicationHandler for App {
                 self.engine.handle_intents(intents);
             }
 
-
-
             WindowEvent::RedrawRequested => {
                 let t = self.start_time.elapsed().as_secs_f32();
-                
-                if let (Some(surface), Some(device), Some(queue), Some(renderer), Some(window)) = 
-                    (&self.surface, &self.device, &self.queue, &mut self.renderer, &self.window) 
-                {
+
+                if let (Some(surface), Some(device), Some(queue), Some(renderer), Some(window)) = (
+                    &self.surface,
+                    &self.device,
+                    &self.queue,
+                    &mut self.renderer,
+                    &self.window,
+                ) {
                     let size = window.inner_size();
-                    let view_proj = glam::Mat4::orthographic_rh(0.0, size.width as f32, size.height as f32, 0.0, -1.0, 1.0);
+                    let view_proj = glam::Mat4::orthographic_rh(
+                        0.0,
+                        size.width as f32,
+                        size.height as f32,
+                        0.0,
+                        -1.0,
+                        1.0,
+                    );
 
                     // Generate test UI
-                    use crate::ui_ir::SurfaceWidget::*;
                     use crate::ui_ir::SurfacePrimitive;
+                    use crate::ui_ir::SurfaceWidget::*;
                     let test_ui = Column {
                         children: vec![
-                            Label { text: "LimeStudio Mirror (V7)".to_string(), is_secondary: false },
+                            Label {
+                                text: "LimeStudio Mirror (V7)".to_string(),
+                                is_secondary: false,
+                            },
                             Row {
                                 children: vec![
                                     Knob {
                                         id: crate::model::stable_id::SurfaceId::generate(),
                                         label: "Frequency".to_string(),
-                                        signal: crate::ui_ir::DisplaySignal::Linear(t.sin() * 0.5 + 0.5),
+                                        signal: crate::ui_ir::DisplaySignal::Linear(
+                                            t.sin() * 0.5 + 0.5,
+                                        ),
                                     },
                                     Knob {
                                         id: crate::model::stable_id::SurfaceId::generate(),
                                         label: "Resonance".to_string(),
-                                        signal: crate::ui_ir::DisplaySignal::Linear(t.cos() * 0.5 + 0.5),
+                                        signal: crate::ui_ir::DisplaySignal::Linear(
+                                            t.cos() * 0.5 + 0.5,
+                                        ),
                                     },
-                                ]
+                                ],
                             },
                             PrimitiveStream {
-                                primitives: vec![
-                                    SurfacePrimitive::Curve {
-                                        id: crate::model::stable_id::SurfaceId::generate(),
-                                        control_points: vec![[100.0, 100.0], [500.0, 400.0]], // Will use auto CP logic
-                                        kind: crate::ui_ir::CurveKind::Flow { direction: 1.0, phase: 0.0, density: 1.0 },
-                                        thickness: 4.0,
-                                        color: [0.0, 0.6, 1.0, 0.8],
-                                        temporal: crate::ui_ir::TemporalStrategy::Instant,
-                                    }
-                                ]
-                            }
-                        ]
+                                primitives: vec![SurfacePrimitive::Curve {
+                                    id: crate::model::stable_id::SurfaceId::generate(),
+                                    control_points: vec![[100.0, 100.0], [500.0, 400.0]], // Will use auto CP logic
+                                    kind: crate::ui_ir::CurveKind::Flow {
+                                        direction: 1.0,
+                                        phase: 0.0,
+                                        density: 1.0,
+                                    },
+                                    thickness: 4.0,
+                                    color: [0.0, 0.6, 1.0, 0.8],
+                                    temporal: crate::ui_ir::TemporalStrategy::Instant,
+                                }],
+                            },
+                        ],
                     };
 
                     self.engine.sync_ui(&test_ui);
                     let instances = self.engine.generate_instances();
-                    let primitives = self.engine.primitive_stream.lock()
+                    let primitives = self
+                        .engine
+                        .primitive_stream
+                        .lock()
                         .map(|guard| guard.clone())
                         .unwrap_or_default();
 
                     if let Ok(frame) = surface.get_current_texture() {
-                        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                        renderer.render_scene(device, queue, &view, t, view_proj, &instances, &primitives);
+                        let view = frame
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+                        renderer.render_scene(
+                            device,
+                            queue,
+                            &view,
+                            t,
+                            view_proj,
+                            &instances,
+                            &primitives,
+                        );
                         frame.present();
                     }
 
@@ -191,16 +227,21 @@ impl ApplicationHandler for App {
 
 impl App {
     fn init_wgpu(&mut self, event_loop: &ActiveEventLoop) -> anyhow::Result<()> {
-        let window = Arc::new(event_loop.create_window(Window::default_attributes().with_title("LimeSurface Mirror"))?);
+        let window = Arc::new(
+            event_loop
+                .create_window(Window::default_attributes().with_title("LimeSurface Mirror"))?,
+        );
         self.window = Some(window.clone());
 
         let surface = self.instance.create_surface(window.clone())?;
-        
-        let adapter = pollster::block_on(self.instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-        })).ok_or_else(|| anyhow::anyhow!("Failed to find a suitable GPU adapter"))?;
+
+        let adapter =
+            pollster::block_on(self.instance.request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            }))
+            .ok_or_else(|| anyhow::anyhow!("Failed to find a suitable GPU adapter"))?;
 
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
@@ -214,8 +255,14 @@ impl App {
 
         let size = window.inner_size();
         let caps = surface.get_capabilities(&adapter);
-        let format = caps.formats.first().copied().ok_or_else(|| anyhow::anyhow!("No supported surface formats"))?;
-        let config = surface.get_default_config(&adapter, size.width, size.height).ok_or_else(|| anyhow::anyhow!("Failed to get default surface config"))?;
+        let format = caps
+            .formats
+            .first()
+            .copied()
+            .ok_or_else(|| anyhow::anyhow!("No supported surface formats"))?;
+        let config = surface
+            .get_default_config(&adapter, size.width, size.height)
+            .ok_or_else(|| anyhow::anyhow!("Failed to get default surface config"))?;
         surface.configure(&device, &config);
 
         let renderer = pollster::block_on(SurfaceRenderer::new(&device, &queue, format));
@@ -234,6 +281,7 @@ pub async fn run_standalone() -> anyhow::Result<()> {
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App::new();
-    event_loop.run_app(&mut app).map_err(|e| anyhow::anyhow!("Winit error: {:?}", e))
+    event_loop
+        .run_app(&mut app)
+        .map_err(|e| anyhow::anyhow!("Winit error: {:?}", e))
 }
-

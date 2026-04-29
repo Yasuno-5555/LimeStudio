@@ -1,17 +1,15 @@
-
-
+use limestudio_core::pipeline::PipelineFactory;
+use limestudio_core::transaction::TransactionLayer;
+use limestudio_surface::render::SurfaceRenderer;
+use limestudio_surface::SurfaceEngine;
+use limestudio_vpl::engine::VplEngine;
+use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
-use std::sync::Arc;
-use limestudio_surface::SurfaceEngine;
-use limestudio_surface::render::SurfaceRenderer;
-use limestudio_vpl::engine::VplEngine;
-use limestudio_core::transaction::TransactionLayer;
-use limestudio_core::pipeline::PipelineFactory;
 
 struct VplApp {
     window: Option<Arc<Window>>,
@@ -55,16 +53,22 @@ impl VplApp {
 
 impl ApplicationHandler for VplApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window = Arc::new(event_loop.create_window(Window::default_attributes().with_title("LimeStudio VPL")).unwrap());
+        let window = Arc::new(
+            event_loop
+                .create_window(Window::default_attributes().with_title("LimeStudio VPL"))
+                .unwrap(),
+        );
         self.window = Some(window.clone());
 
         let surface = self.instance.create_surface(window.clone()).unwrap();
-        
-        let adapter = pollster::block_on(self.instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-        })).unwrap();
+
+        let adapter =
+            pollster::block_on(self.instance.request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            }))
+            .unwrap();
 
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
@@ -74,12 +78,15 @@ impl ApplicationHandler for VplApp {
                 ..Default::default()
             },
             None,
-        )).unwrap();
+        ))
+        .unwrap();
 
         let size = window.inner_size();
         let caps = surface.get_capabilities(&adapter);
         let format = caps.formats[0];
-        let config = surface.get_default_config(&adapter, size.width, size.height).unwrap();
+        let config = surface
+            .get_default_config(&adapter, size.width, size.height)
+            .unwrap();
         surface.configure(&device, &config);
 
         let renderer = pollster::block_on(SurfaceRenderer::new(&device, &queue, format));
@@ -95,7 +102,9 @@ impl ApplicationHandler for VplApp {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(new_size) => {
-                if let (Some(surface), Some(device), Some(config)) = (&self.surface, &self.device, &mut self.config) {
+                if let (Some(surface), Some(device), Some(config)) =
+                    (&self.surface, &self.device, &mut self.config)
+                {
                     config.width = new_size.width;
                     config.height = new_size.height;
                     surface.configure(device, config);
@@ -104,46 +113,56 @@ impl ApplicationHandler for VplApp {
             WindowEvent::CursorMoved { position, .. } => {
                 let pos = glam::Vec2::new(position.x as f32, position.y as f32);
                 self.cursor_pos = pos;
-                self.vpl_engine.handle_event(limestudio_surface::runtime::input::SurfaceEvent::PointerMove {
-                    position: pos,
-                    modifiers: Default::default(),
-                });
+                self.vpl_engine.handle_event(
+                    limestudio_surface::runtime::input::SurfaceEvent::PointerMove {
+                        position: pos,
+                        modifiers: Default::default(),
+                    },
+                );
             }
             WindowEvent::MouseInput { state, button, .. } => {
-                use winit::event::ElementState;
                 use limestudio_surface::runtime::input::MouseButton as SurfaceButton;
+                use winit::event::ElementState;
                 let s_button = match button {
                     winit::event::MouseButton::Left => SurfaceButton::Left,
                     winit::event::MouseButton::Right => SurfaceButton::Right,
                     winit::event::MouseButton::Middle => SurfaceButton::Middle,
                     _ => return,
                 };
-                
+
                 let pos = self.cursor_pos;
-                
+
                 match state {
                     ElementState::Pressed => {
-                        self.vpl_engine.handle_event(limestudio_surface::runtime::input::SurfaceEvent::PointerDown {
-                            position: pos,
-                            button: s_button,
-                            modifiers: Default::default(),
-                        });
+                        self.vpl_engine.handle_event(
+                            limestudio_surface::runtime::input::SurfaceEvent::PointerDown {
+                                position: pos,
+                                button: s_button,
+                                modifiers: Default::default(),
+                            },
+                        );
                     }
                     ElementState::Released => {
-                        self.vpl_engine.handle_event(limestudio_surface::runtime::input::SurfaceEvent::PointerUp {
-                            position: pos,
-                            button: s_button,
-                            modifiers: Default::default(),
-                        });
+                        self.vpl_engine.handle_event(
+                            limestudio_surface::runtime::input::SurfaceEvent::PointerUp {
+                                position: pos,
+                                button: s_button,
+                                modifiers: Default::default(),
+                            },
+                        );
                     }
                 }
             }
             WindowEvent::RedrawRequested => {
                 let t = self.start_time.elapsed().as_secs_f32();
-                
-                if let (Some(surface), Some(device), Some(queue), Some(renderer), Some(window)) = 
-                    (&self.surface, &self.device, &self.queue, &mut self.renderer, &self.window) 
-                {
+
+                if let (Some(surface), Some(device), Some(queue), Some(renderer), Some(window)) = (
+                    &self.surface,
+                    &self.device,
+                    &self.queue,
+                    &mut self.renderer,
+                    &self.window,
+                ) {
                     // 1. Build UI from VPL Engine
                     let ui_tree = self.vpl_engine.build_ui();
 
@@ -153,8 +172,18 @@ impl ApplicationHandler for VplApp {
 
                     // 3. Render
                     if let Ok(frame) = surface.get_current_texture() {
-                        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                        renderer.render_scene(device, queue, &view, t, self.surface_engine.camera.view_projection(), &instances, &[]);
+                        let view = frame
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+                        renderer.render_scene(
+                            device,
+                            queue,
+                            &view,
+                            t,
+                            self.surface_engine.camera.view_projection(),
+                            &instances,
+                            &[],
+                        );
                         frame.present();
                     }
                     window.request_redraw();
@@ -171,5 +200,7 @@ async fn main() -> anyhow::Result<()> {
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = VplApp::new();
-    event_loop.run_app(&mut app).map_err(|e| anyhow::anyhow!("Winit error: {:?}", e))
+    event_loop
+        .run_app(&mut app)
+        .map_err(|e| anyhow::anyhow!("Winit error: {:?}", e))
 }

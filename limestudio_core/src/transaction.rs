@@ -1,9 +1,9 @@
+use crate::pipeline::{EngineCommand, EngineResponse, EngineToUiPipeline, UiToEnginePipeline};
 use crate::{Intent, ViewCache};
-use crate::pipeline::{EngineCommand, EngineResponse, UiToEnginePipeline, EngineToUiPipeline};
-use dirtydata_core::{Patch, PatchSet, Operation};
-use dirtydata_core::{StableId, ConfigValue, ConfigChange};
-use tracing::{info, error, warn};
-use std::collections::{HashMap, BTreeMap, VecDeque};
+use dirtydata_core::{ConfigChange, ConfigValue, StableId};
+use dirtydata_core::{Operation, Patch, PatchSet};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use tracing::{error, info, warn};
 
 /// 楽観的更新の状態を追跡するためのレコード
 /// The source of a change, defining responsibility.
@@ -51,10 +51,10 @@ pub struct HistoryNode {
 pub struct TransactionLayer {
     /// The Single Source of Truth
     project: crate::project::ProjectSpec,
-    
+
     /// 継続的なパラメータ変更のバッファ
     _ongoing_tweaks: HashMap<(dirtydata_core::StableId, String), f32>,
-    
+
     /// 承認待ちのトランザクションキュー（Reconciliation用）
     pending_queue: VecDeque<PendingTransaction>,
 
@@ -64,18 +64,15 @@ pub struct TransactionLayer {
 
     /// 監査ログ (将来的に history_nodes に統合可能だが、互換性のために残す)
     audit_log: HashMap<dirtydata_core::types::PatchId, TransactionMetadata>,
-    
+
     /// エンジンへの通信パイプライン
     pipeline: UiToEnginePipeline,
-    
+
     session_id: String,
 }
 
 impl TransactionLayer {
-    pub fn new(
-        project: crate::project::ProjectSpec,
-        pipeline: UiToEnginePipeline
-    ) -> Self {
+    pub fn new(project: crate::project::ProjectSpec, pipeline: UiToEnginePipeline) -> Self {
         Self {
             project,
             _ongoing_tweaks: HashMap::new(),
@@ -96,9 +93,9 @@ impl TransactionLayer {
     pub fn dispatch_intent(&mut self, intent: Intent, author: Author) -> anyhow::Result<()> {
         let trace_id = ulid::Ulid::new();
         info!(session = %self.session_id, %trace_id, %author, "Dispatching intent: {:?}", intent);
-        
+
         let patch_set = self.compile_intent(&intent, trace_id)?;
-        
+
         let metadata = TransactionMetadata {
             author,
             timestamp: crate::time::Timestamp::now(),
@@ -123,12 +120,16 @@ impl TransactionLayer {
     }
 
     /// Intent を PatchSet に変換する内部ロジック
-    fn compile_intent(&mut self, intent: &Intent, trace_id: ulid::Ulid) -> anyhow::Result<Option<PatchSet>> {
+    fn compile_intent(
+        &mut self,
+        intent: &Intent,
+        trace_id: ulid::Ulid,
+    ) -> anyhow::Result<Option<PatchSet>> {
         match intent {
             Intent::AddNode { kind, position } => {
                 let _node_id = self.project.ui.add_node(kind, *position);
                 let kernel_id = dirtydata_core::StableId::new(); // Bridge to DirtyData
-                
+
                 let node = match kind.as_str() {
                     "Source" => dirtydata_core::Node::new_source("New Source"),
                     "Sink" => dirtydata_core::Node::new_sink("New Sink"),
@@ -147,8 +148,11 @@ impl TransactionLayer {
             Intent::MoveNode { node_id, position } => {
                 if let Some(kernel_id) = self.project.view.id_map.resolve(*node_id) {
                     // Perception: Update cached position
-                    self.project.view.node_positions.insert(kernel_id, *position);
-                    
+                    self.project
+                        .view
+                        .node_positions
+                        .insert(kernel_id, *position);
+
                     // Reality: Moving nodes usually doesn't affect DSP, but it's part of the topology
                     // In LimeStudio, we record movement as a non-DSP patch if needed.
                     Ok(None)
@@ -157,18 +161,28 @@ impl TransactionLayer {
                 }
             }
 
-            Intent::TweakParam { node_id, param, value } => {
+            Intent::TweakParam {
+                node_id,
+                param,
+                value,
+            } => {
                 if let Some(kernel_id) = self.project.view.id_map.resolve(*node_id) {
                     let mut delta = BTreeMap::new();
-                    delta.insert(param.clone(), ConfigChange {
-                        old: None,
-                        new: Some(ConfigValue::Float(*value as f64)),
-                    });
-                    
-                    let op = Operation::ModifyConfig { node_id: kernel_id, delta };
+                    delta.insert(
+                        param.clone(),
+                        ConfigChange {
+                            old: None,
+                            new: Some(ConfigValue::Float(*value as f64)),
+                        },
+                    );
+
+                    let op = Operation::ModifyConfig {
+                        node_id: kernel_id,
+                        delta,
+                    };
                     let mut patch = Patch::from_operations(vec![op]);
                     patch.intent_ref = Some(dirtydata_core::IntentId(trace_id));
-                    
+
                     Ok(Some(PatchSet::single(patch)))
                 } else {
                     Err(anyhow::anyhow!("Invalid UI ID"))
@@ -190,10 +204,11 @@ impl TransactionLayer {
                 EngineResponse::SnapshotUpdated { snapshot, trace_id } => {
                     // Pending Queue から一致するものを探してメタデータを取得
                     if let Some(tid) = trace_id {
-                        if let Some(pending) = self.pending_queue.iter().find(|p| p.trace_id == tid) {
+                        if let Some(pending) = self.pending_queue.iter().find(|p| p.trace_id == tid)
+                        {
                             if let Some(last_patch_id) = snapshot.lineage.applied_patches.last() {
                                 let new_node_idx = self.history_nodes.len();
-                                
+
                                 let metadata = TransactionMetadata {
                                     author: pending.metadata.author.clone(),
                                     timestamp: pending.metadata.timestamp,
@@ -215,19 +230,22 @@ impl TransactionLayer {
                                 if let Some(parent_idx) = self.current_history_idx {
                                     self.history_nodes[parent_idx].children.push(new_node_idx);
                                 }
-                                
+
                                 self.history_nodes.push(new_node);
                                 self.current_history_idx = Some(new_node_idx);
                             }
                         }
                         self.pending_queue.retain(|p| p.trace_id != tid);
                     }
-                    
+
                     // For now, we don't sync the whole graph back as we want LimeGraph to be SSOT
                     // In a real impl, we'd merge DSP state back into LimeGraph.dsp
                 }
                 EngineResponse::Error { message, trace_id } => {
-                    error!("Kernel rejected update: {} (TraceID: {:?})", message, trace_id);
+                    error!(
+                        "Kernel rejected update: {} (TraceID: {:?})",
+                        message, trace_id
+                    );
                     // ロールバック処理：Pending Queue から削除し、UIを最新の Snapshot で強制同期
                     if let Some(tid) = trace_id {
                         self.pending_queue.retain(|p| p.trace_id != tid);
@@ -265,7 +283,10 @@ impl TransactionLayer {
     /// 履歴ツリーの特定のポイントへジャンプする (タイムトラベル)
     pub fn jump_to_history(&mut self, idx: usize) -> anyhow::Result<()> {
         if let Some(node) = self.history_nodes.get(idx) {
-            info!("Time Travel: Jumping to history node {}, patch {:?}", idx, node.patch_id);
+            info!(
+                "Time Travel: Jumping to history node {}, patch {:?}",
+                idx, node.patch_id
+            );
             self.project = node.project.clone();
             self.current_history_idx = Some(idx);
             self.pipeline.send(EngineCommand::Checkout(node.patch_id))?;
@@ -296,11 +317,11 @@ impl TransactionLayer {
     pub fn view_cache(&self) -> &ViewCache {
         &self.project.view
     }
-    
+
     pub fn graph(&self) -> &dirtydata_core::ir::Graph {
         &self.project.graph
     }
-    
+
     pub fn ui_graph(&self) -> &limestudio_graph::LimeGraph {
         &self.project.ui
     }

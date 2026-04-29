@@ -1,6 +1,6 @@
-use glam::Vec2;
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, FrameStyle, TemporalStrategy, GlyphPlacement, SurfaceId};
+use crate::ui_ir::{FrameStyle, GlyphPlacement, SurfaceId, SurfacePrimitive, TemporalStrategy};
+use glam::Vec2;
 
 pub struct SurfaceButton {
     pub id: SurfaceId,
@@ -42,18 +42,27 @@ impl SurfaceButton {
         if self.is_focused {
             primitives.push(SurfacePrimitive::FocusRing {
                 id: self.id,
-                rect: [self.position.x - 2.0, self.position.y - 2.0, self.size.x + 4.0, self.size.y + 4.0],
+                rect: [
+                    self.position.x - 2.0,
+                    self.position.y - 2.0,
+                    self.size.x + 4.0,
+                    self.size.y + 4.0,
+                ],
                 color: Color::ACCENT_BLUE.to_array(),
                 temporal: TemporalStrategy::Standard,
             });
         }
-        
+
         // 1. Background Frame
         primitives.push(SurfacePrimitive::Frame {
             id: self.id,
             rect: [self.position.x, self.position.y, self.size.x, self.size.y],
             style: FrameStyle::Standard,
-            color: if self.is_pressed { self.colors.active.to_array() } else { self.colors.base.to_array() },
+            color: if self.is_pressed {
+                self.colors.active.to_array()
+            } else {
+                self.colors.base.to_array()
+            },
             temporal: TemporalStrategy::Standard,
         });
 

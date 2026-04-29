@@ -1,7 +1,7 @@
 pub mod layout;
-use serde::{Serialize, Deserialize};
-use std::collections::{HashMap, HashSet};
 use dirtydata_core::types::StableId;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 /// UI-side local identifier.
 /// UI components should only deal with this.
@@ -29,7 +29,7 @@ impl IdBiMap {
     pub fn register(&mut self, kernel_id: StableId, uuid: Option<uuid::Uuid>) -> UiIndex {
         let index = self.next_index;
         self.next_index += 1;
-        
+
         let gen = self.generations.entry(index).or_insert(0);
         *gen += 1;
         let current_gen = *gen;
@@ -78,13 +78,13 @@ pub struct ViewCache {
 
     /// 選択されているノードのID集合
     pub selected_nodes: HashSet<StableId>,
-    
+
     /// ビューポートの状態
     pub viewport: ViewportState,
-    
+
     /// ノードの表示位置（レイアウトキャッシュ）
     pub node_positions: HashMap<StableId, [f32; 2]>,
-    
+
     /// インタラクションメモリ
     pub interaction: InteractionMemory,
 
@@ -187,9 +187,9 @@ mod tests {
         let mut map = IdBiMap::new();
         let k1 = StableId::new();
         let u1 = map.register(k1, None);
-        
+
         map.unregister_by_ui_index(u1);
-        
+
         // Re-using the same index is not directly possible with current simple increment,
         // but we verify that once unregistered, it stays gone.
         assert_eq!(map.resolve(u1), None);

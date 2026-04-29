@@ -1,4 +1,4 @@
-use dirtydata_core::{Graph, StableId, ConfigValue};
+use dirtydata_core::{ConfigValue, Graph, StableId};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,8 +34,10 @@ impl SemanticDiff {
     pub fn compare(old: &Graph, new: &Graph) -> Vec<SemanticChange> {
         let mut changes = Vec::new();
 
-        let old_nodes: HashMap<StableId, &dirtydata_core::Node> = old.nodes.iter().map(|(id, n)| (*id, n)).collect();
-        let new_nodes: HashMap<StableId, &dirtydata_core::Node> = new.nodes.iter().map(|(id, n)| (*id, n)).collect();
+        let old_nodes: HashMap<StableId, &dirtydata_core::Node> =
+            old.nodes.iter().map(|(id, n)| (*id, n)).collect();
+        let new_nodes: HashMap<StableId, &dirtydata_core::Node> =
+            new.nodes.iter().map(|(id, n)| (*id, n)).collect();
 
         let old_ids: HashSet<StableId> = old_nodes.keys().cloned().collect();
         let new_ids: HashSet<StableId> = new_nodes.keys().cloned().collect();
@@ -87,7 +89,7 @@ impl SemanticDiff {
 
         // 4. Connections (Simplified check)
         // Note: Real connection diffing requires comparing the edge list
-        
+
         changes
     }
 }

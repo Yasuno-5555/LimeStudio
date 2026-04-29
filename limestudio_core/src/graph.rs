@@ -5,7 +5,10 @@ use std::collections::HashMap;
 pub enum NodeDef {
     Input,
     Output,
-    Processor { kind: String, params: HashMap<String, ParamSource> },
+    Processor {
+        kind: String,
+        params: HashMap<String, ParamSource>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -51,8 +54,12 @@ impl GraphBuilder {
         }
     }
 
-    pub fn input_node(&self) -> StableId { self.input_node }
-    pub fn output_node(&self) -> StableId { self.output_node }
+    pub fn input_node(&self) -> StableId {
+        self.input_node
+    }
+    pub fn output_node(&self) -> StableId {
+        self.output_node
+    }
 
     pub fn add_node(&mut self, def: NodeDef) -> StableId {
         let id = StableId::new();
@@ -86,21 +93,28 @@ impl GraphBuilder {
 
     pub fn build(self) -> dirtydata_core::ir::Graph {
         let mut graph = dirtydata_core::ir::Graph::new();
-        
+
         // Map our IDs to DirtyData nodes
         let mut id_map = HashMap::new();
-        
+
         for (id, def) in self.nodes {
             let node = match def {
                 NodeDef::Input => dirtydata_core::ir::Node::new_input_proxy("input"),
                 NodeDef::Output => dirtydata_core::ir::Node::new_output_proxy("output"),
                 NodeDef::Processor { kind, params } => {
                     let mut node = dirtydata_core::ir::Node::new_processor(&kind);
-                    node.config.insert("name".to_string(), dirtydata_core::types::ConfigValue::String(kind.clone()));
+                    node.config.insert(
+                        "name".to_string(),
+                        dirtydata_core::types::ConfigValue::String(kind.clone()),
+                    );
                     for (k, v) in params {
                         let val = match v {
-                            ParamSource::Constant(f) => dirtydata_core::types::ConfigValue::Float(f as f64),
-                            ParamSource::Parameter(id) => dirtydata_core::types::ConfigValue::String(format!("param:{}", id)),
+                            ParamSource::Constant(f) => {
+                                dirtydata_core::types::ConfigValue::Float(f as f64)
+                            }
+                            ParamSource::Parameter(id) => {
+                                dirtydata_core::types::ConfigValue::String(format!("param:{}", id))
+                            }
                         };
                         node.config.insert(k.to_string(), val);
                     }
@@ -115,7 +129,7 @@ impl GraphBuilder {
         for edge in self.edges {
             let source_id = id_map.get(&edge.from_node).unwrap();
             let target_id = id_map.get(&edge.to_node).unwrap();
-            
+
             let source = dirtydata_core::types::PortRef {
                 node_id: *source_id,
                 port_name: edge.from_port,
@@ -124,7 +138,7 @@ impl GraphBuilder {
                 node_id: *target_id,
                 port_name: edge.to_port,
             };
-            
+
             let _ = graph.connect(source, target);
         }
 

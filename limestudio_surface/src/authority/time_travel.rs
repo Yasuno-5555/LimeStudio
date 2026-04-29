@@ -1,6 +1,6 @@
-use std::collections::{VecDeque, HashMap};
 use dirtydata_core::types::StableId;
 use dirtydata_runtime::nodes::base::NodeState;
+use std::collections::{HashMap, VecDeque};
 
 /// §SSS: Time Travel Engine — Forensic History.
 /// "Audio Time Travel Debugger. 人類はこれを待ってたのに誰も作らなかった。怠惰なので。"
@@ -53,5 +53,3 @@ impl TimeTravelEngine {
         self.current_index = idx;
     }
 }
-
-

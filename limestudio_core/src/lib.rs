@@ -1,27 +1,27 @@
-pub mod view;
-pub mod transaction;
-pub mod pipeline;
-pub mod graph;
-pub mod engine;
-pub mod preset;
-pub mod torture;
-pub mod topology;
-pub mod math;
-pub mod time;
-pub mod signal;
 pub mod builder;
-pub mod diff;
 pub mod causality;
-pub mod provenance;
-pub mod telemetry;
+pub mod diff;
+pub mod engine;
 #[cfg(test)]
 mod engine_tests;
-pub mod reality_bridge_validation;
-pub mod project;
+pub mod graph;
+pub mod math;
 pub mod node_discovery;
+pub mod pipeline;
+pub mod preset;
+pub mod project;
+pub mod provenance;
+pub mod reality_bridge_validation;
+pub mod signal;
+pub mod telemetry;
+pub mod time;
+pub mod topology;
+pub mod torture;
+pub mod transaction;
+pub mod view;
 
-pub use view::{ViewCache, UiIndex};
 pub use project::ProjectSpec;
+pub use view::{UiIndex, ViewCache};
 
 /// 汎用的なオーディオバッファインターフェース
 pub trait AudioBuffer {
@@ -52,26 +52,44 @@ impl ProcessContext {
 pub trait AudioProcessor: Send + Sync {
     fn prepare(&mut self, context: &ProcessContext);
     fn process<B: AudioBuffer>(&mut self, buffer: &mut B);
-    fn latency(&self) -> u32 { 0 }
+    fn latency(&self) -> u32 {
+        0
+    }
     fn set_parameter(&mut self, _id: u32, _value: f32) {}
 }
 
 #[derive(Debug, Clone)]
 pub enum Intent {
-    AddNode { kind: String, position: [f32; 2] },
+    AddNode {
+        kind: String,
+        position: [f32; 2],
+    },
     RemoveNode(UiIndex),
-    MoveNode { node_id: UiIndex, position: [f32; 2] },
-    Connect { from: UiIndex, to: UiIndex },
-    TweakParam { node_id: UiIndex, param: String, value: f32 },
-    EndTweak { node_id: UiIndex, param: String },
+    MoveNode {
+        node_id: UiIndex,
+        position: [f32; 2],
+    },
+    Connect {
+        from: UiIndex,
+        to: UiIndex,
+    },
+    TweakParam {
+        node_id: UiIndex,
+        param: String,
+        value: f32,
+    },
+    EndTweak {
+        node_id: UiIndex,
+        param: String,
+    },
     SelectNodes(Vec<UiIndex>),
 }
 
 /// リアルタイムオーディオスレッド向けの軽量なパラメータ更新イベント
 #[derive(Debug, Clone)]
 pub enum PatchEvent {
-    SetParameter { 
+    SetParameter {
         param_id: String, // NIH-plug parameter ID
-        value: f32 
+        value: f32,
     },
 }

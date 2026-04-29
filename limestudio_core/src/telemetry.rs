@@ -3,9 +3,9 @@
 //! Streams real-time "Truth" from the Audio Engine to the UI without blocking.
 //! "Reality is a stream of events, not a static state."
 
-use dirtydata_core::types::{Timestamp, StableId};
-use rtrb::{Producer, Consumer, RingBuffer};
-use serde::{Serialize, Deserialize};
+use dirtydata_core::types::{StableId, Timestamp};
+use rtrb::{Consumer, Producer, RingBuffer};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TelemetryPacket {
@@ -22,7 +22,11 @@ pub enum TelemetryEvent {
     /// NaN or Infinity detected in the signal path.
     NanDetected { node_id: Option<StableId> },
     /// A voice became active.
-    VoiceActive { index: usize, pitch: u8, velocity: f32 },
+    VoiceActive {
+        index: usize,
+        pitch: u8,
+        velocity: f32,
+    },
     /// A voice entered release phase.
     VoiceReleased { index: usize },
     /// JIT compiler or execution error.
@@ -74,8 +78,5 @@ impl TelemetryConsumer {
 /// Creates a new Forensic Telemetry Bridge.
 pub fn create_bridge(capacity: usize) -> (TelemetryProducer, TelemetryConsumer) {
     let (tx, rx) = RingBuffer::new(capacity);
-    (
-        TelemetryProducer { tx },
-        TelemetryConsumer { rx },
-    )
+    (TelemetryProducer { tx }, TelemetryConsumer { rx })
 }

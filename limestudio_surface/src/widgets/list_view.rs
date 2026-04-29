@@ -1,6 +1,8 @@
-use glam::Vec2;
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, FrameStyle, TemporalStrategy, OverlapLaw, GlyphPlacement, SurfaceId};
+use crate::ui_ir::{
+    FrameStyle, GlyphPlacement, OverlapLaw, SurfaceId, SurfacePrimitive, TemporalStrategy,
+};
+use glam::Vec2;
 
 pub struct SurfaceListView {
     pub id: SurfaceId,
@@ -62,7 +64,11 @@ impl SurfaceListView {
                 id: self.id,
                 rect: [self.position.x, item_y, self.size.x, self.item_height],
                 style: FrameStyle::Standard,
-                color: if is_selected { self.colors.selection.to_array() } else { self.colors.item_bg.to_array() },
+                color: if is_selected {
+                    self.colors.selection.to_array()
+                } else {
+                    self.colors.item_bg.to_array()
+                },
                 temporal: TemporalStrategy::Fast,
             });
 
@@ -73,7 +79,11 @@ impl SurfaceListView {
                     pos: [self.position.x + 8.0, item_y + 16.0],
                     scale: 1.0,
                 }],
-                color: if is_selected { Color::BG_DEEP.to_array() } else { self.colors.text.to_array() },
+                color: if is_selected {
+                    Color::BG_DEEP.to_array()
+                } else {
+                    self.colors.text.to_array()
+                },
             });
         }
 

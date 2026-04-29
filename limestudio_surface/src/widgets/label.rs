@@ -1,6 +1,6 @@
-use glam::Vec2;
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, GlyphPlacement, SurfaceId};
+use crate::ui_ir::{GlyphPlacement, SurfaceId, SurfacePrimitive};
+use glam::Vec2;
 
 pub struct SurfaceLabel {
     pub id: SurfaceId,
@@ -30,8 +30,12 @@ impl SurfaceLabel {
     }
 
     pub fn build_primitives(&self) -> Vec<SurfacePrimitive> {
-        let color = if self.is_secondary { self.colors.secondary } else { self.colors.primary };
-        
+        let color = if self.is_secondary {
+            self.colors.secondary
+        } else {
+            self.colors.primary
+        };
+
         // In a real implementation, we would shape the text here.
         // For now, we emit a GlyphRun placeholder.
         vec![SurfacePrimitive::GlyphRun {

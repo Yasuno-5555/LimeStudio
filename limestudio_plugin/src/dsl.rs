@@ -1,10 +1,10 @@
 //! DSL for LimeStudio Plugin
 //! Provides a fluent interface for building the DSP graph and UI.
 
-use limestudio_core::graph::{GraphBuilder, StableId, ParamSource};
 pub use limestudio_core::graph::ParamSource as DslParam;
-use std::ops::Shr;
+use limestudio_core::graph::{GraphBuilder, ParamSource, StableId};
 use std::cell::RefCell;
+use std::ops::Shr;
 
 pub struct NodeHandle {
     pub id: StableId,
@@ -48,45 +48,69 @@ impl NodeHandle {
 
 #[allow(non_snake_case)]
 pub fn Sine(_freq: ParamSource) -> NodeHandle {
-    NodeHandle { id: StableId::new() }
+    NodeHandle {
+        id: StableId::new(),
+    }
 }
 
 #[allow(non_snake_case)]
 pub fn Oscillator(_freq: ParamSource, _wave: &str) -> NodeHandle {
-    NodeHandle { id: StableId::new() }
+    NodeHandle {
+        id: StableId::new(),
+    }
 }
 
 #[allow(non_snake_case)]
-pub fn ADSR(_a: ParamSource, _d: ParamSource, _s: ParamSource, _r: ParamSource, _gate: ParamSource) -> NodeHandle {
-    NodeHandle { id: StableId::new() }
+pub fn ADSR(
+    _a: ParamSource,
+    _d: ParamSource,
+    _s: ParamSource,
+    _r: ParamSource,
+    _gate: ParamSource,
+) -> NodeHandle {
+    NodeHandle {
+        id: StableId::new(),
+    }
 }
 
 #[allow(non_snake_case)]
 pub fn Multiply(_a: NodeHandle, _b: NodeHandle) -> NodeHandle {
-    NodeHandle { id: StableId::new() }
+    NodeHandle {
+        id: StableId::new(),
+    }
 }
 
 #[allow(non_snake_case)]
 pub fn Filter(_freq: ParamSource, _q: ParamSource, _kind: &str) -> NodeHandle {
-    NodeHandle { id: StableId::new() }
+    NodeHandle {
+        id: StableId::new(),
+    }
 }
 
 #[allow(non_snake_case)]
 pub fn Delay(_time: ParamSource) -> NodeHandle {
-    NodeHandle { id: StableId::new() }
+    NodeHandle {
+        id: StableId::new(),
+    }
 }
 
 #[allow(non_snake_case)]
 pub fn Add(_a: NodeHandle, _b: NodeHandle) -> NodeHandle {
-    NodeHandle { id: StableId::new() }
+    NodeHandle {
+        id: StableId::new(),
+    }
 }
 
 #[allow(non_snake_case)]
 pub fn m2f(_p: ParamSource, _t: ParamSource) -> NodeHandle {
-    NodeHandle { id: StableId::new() }
+    NodeHandle {
+        id: StableId::new(),
+    }
 }
 
 #[allow(non_snake_case)]
 pub fn SineVCO(_freq: NodeHandle) -> NodeHandle {
-    NodeHandle { id: StableId::new() }
+    NodeHandle {
+        id: StableId::new(),
+    }
 }

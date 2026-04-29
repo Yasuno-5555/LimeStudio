@@ -1,6 +1,8 @@
-use glam::Vec2;
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, FrameStyle, TemporalStrategy, IndicatorKind, GlyphPlacement, SurfaceId};
+use crate::ui_ir::{
+    FrameStyle, GlyphPlacement, IndicatorKind, SurfaceId, SurfacePrimitive, TemporalStrategy,
+};
+use glam::Vec2;
 
 pub struct SurfaceTextInput {
     pub id: SurfaceId,
@@ -48,17 +50,26 @@ impl SurfaceTextInput {
         if self.is_focused {
             primitives.push(SurfacePrimitive::FocusRing {
                 id: self.id,
-                rect: [self.position.x - 2.0, self.position.y - 2.0, self.size.x + 4.0, self.size.y + 4.0],
+                rect: [
+                    self.position.x - 2.0,
+                    self.position.y - 2.0,
+                    self.size.x + 4.0,
+                    self.size.y + 4.0,
+                ],
                 color: Color::ACCENT_BLUE.to_array(),
                 temporal: TemporalStrategy::Standard,
             });
         }
-        
+
         // 1. Box Frame
         primitives.push(SurfacePrimitive::Frame {
             id: self.id,
             rect: [self.position.x, self.position.y, self.size.x, self.size.y],
-            style: if self.is_active { FrameStyle::Field } else { FrameStyle::Standard },
+            style: if self.is_active {
+                FrameStyle::Field
+            } else {
+                FrameStyle::Standard
+            },
             color: self.colors.bg.to_array(),
             temporal: TemporalStrategy::Instant,
         });
@@ -77,7 +88,12 @@ impl SurfaceTextInput {
         if self.is_active {
             primitives.push(SurfacePrimitive::Indicator {
                 id: self.id,
-                rect: [self.position.x + 8.0 + (self.cursor_pos as f32 * 8.0), self.position.y + 6.0, 2.0, 20.0],
+                rect: [
+                    self.position.x + 8.0 + (self.cursor_pos as f32 * 8.0),
+                    self.position.y + 6.0,
+                    2.0,
+                    20.0,
+                ],
                 kind: IndicatorKind::Led,
                 value: 1.0,
                 color: self.colors.caret.to_array(),

@@ -1,11 +1,11 @@
-use crate::model::stable_id::SurfaceId;
 use crate::color::Color;
+use crate::model::stable_id::SurfaceId;
 use glam::Vec2;
 
 #[derive(Debug, Clone)]
 pub enum SignalStatus {
     Normal,
-    Warning(String), // Amber
+    Warning(String),  // Amber
     Critical(String), // Red
 }
 
@@ -34,18 +34,30 @@ impl SignalBadge {
         // 1. Latency Badge
         if self.latency_samples > 0 {
             let text = format!("+{} smp", self.latency_samples);
-            primitives.extend(self.create_mini_badge(screen_pos + Vec2::new(0.0, offset_y), &text, Color::TEXT_SECONDARY));
+            primitives.extend(self.create_mini_badge(
+                screen_pos + Vec2::new(0.0, offset_y),
+                &text,
+                Color::TEXT_SECONDARY,
+            ));
             offset_y += 12.0;
         }
 
         // 2. NaN / Error Badge
         match &self.status {
             SignalStatus::Warning(msg) => {
-                primitives.extend(self.create_mini_badge(screen_pos + Vec2::new(0.0, offset_y), msg, Color::AMBER));
+                primitives.extend(self.create_mini_badge(
+                    screen_pos + Vec2::new(0.0, offset_y),
+                    msg,
+                    Color::AMBER,
+                ));
                 offset_y += 12.0;
             }
             SignalStatus::Critical(msg) => {
-                primitives.extend(self.create_mini_badge(screen_pos + Vec2::new(0.0, offset_y), msg, Color::ERROR));
+                primitives.extend(self.create_mini_badge(
+                    screen_pos + Vec2::new(0.0, offset_y),
+                    msg,
+                    Color::ERROR,
+                ));
                 offset_y += 12.0;
             }
             _ => {}
@@ -54,16 +66,25 @@ impl SignalBadge {
         // 3. CPU Badge
         if self.cpu_us > 0.0 {
             let text = format!("{:.1}μs", self.cpu_us);
-            primitives.extend(self.create_mini_badge(screen_pos + Vec2::new(0.0, offset_y), &text, Color::TEXT_SECONDARY));
+            primitives.extend(self.create_mini_badge(
+                screen_pos + Vec2::new(0.0, offset_y),
+                &text,
+                Color::TEXT_SECONDARY,
+            ));
         }
 
         primitives
     }
 
-    fn create_mini_badge(&self, pos: Vec2, _text: &str, color: Color) -> Vec<crate::ui_ir::SurfacePrimitive> {
+    fn create_mini_badge(
+        &self,
+        pos: Vec2,
+        _text: &str,
+        color: Color,
+    ) -> Vec<crate::ui_ir::SurfacePrimitive> {
         let mut prims = Vec::new();
         let rect = [pos.x, pos.y, 40.0, 10.0];
-        
+
         prims.push(crate::ui_ir::SurfacePrimitive::Frame {
             id: self.node_id,
             rect,

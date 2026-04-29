@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use crate::model::stable_id::SurfaceId;
 use glam::Vec2;
+use std::collections::HashMap;
 
 pub struct CodeFragment {
     pub source: String,
@@ -24,7 +24,9 @@ pub struct SnippetMetadata {
 }
 
 impl Default for VisibleCompilerRegistry {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl VisibleCompilerRegistry {
@@ -56,4 +58,3 @@ impl VisibleCompilerRegistry {
         }
     }
 }
-

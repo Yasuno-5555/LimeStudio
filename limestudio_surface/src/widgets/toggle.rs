@@ -1,6 +1,6 @@
-use glam::Vec2;
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, FrameStyle, IndicatorKind, TemporalStrategy, SurfaceId};
+use crate::ui_ir::{FrameStyle, IndicatorKind, SurfaceId, SurfacePrimitive, TemporalStrategy};
+use glam::Vec2;
 
 pub struct SurfaceToggle {
     pub id: SurfaceId,
@@ -42,12 +42,17 @@ impl SurfaceToggle {
         if self.is_focused {
             primitives.push(SurfacePrimitive::FocusRing {
                 id: self.id,
-                rect: [self.position.x - 2.0, self.position.y - 2.0, self.size.x + 4.0, self.size.y + 4.0],
+                rect: [
+                    self.position.x - 2.0,
+                    self.position.y - 2.0,
+                    self.size.x + 4.0,
+                    self.size.y + 4.0,
+                ],
                 color: Color::ACCENT_BLUE.to_array(),
                 temporal: TemporalStrategy::Standard,
             });
         }
-        
+
         // 1. Outer Frame
         primitives.push(SurfacePrimitive::Frame {
             id: self.id,
@@ -60,7 +65,12 @@ impl SurfaceToggle {
         // 2. Inner Indicator (Switch)
         primitives.push(SurfacePrimitive::Indicator {
             id: self.id,
-            rect: [self.position.x + 4.0, self.position.y + 4.0, self.size.x - 8.0, self.size.y - 8.0],
+            rect: [
+                self.position.x + 4.0,
+                self.position.y + 4.0,
+                self.size.x - 8.0,
+                self.size.y - 8.0,
+            ],
             kind: IndicatorKind::Toggle,
             value: if self.is_on { 1.0 } else { 0.0 },
             color: self.colors.active.to_array(),

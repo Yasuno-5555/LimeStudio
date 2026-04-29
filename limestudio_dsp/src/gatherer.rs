@@ -4,14 +4,14 @@ pub struct BlockGatherer {
     // データ保持用
     input_buffer: VecDeque<f32>,
     output_buffer: VecDeque<f32>,
-    
+
     // 設定
     window_size: usize, // FFT長 (例: 2048)
     hop_size: usize,    // ずらす幅 (例: 512)
-    
+
     // 一時バッファ
     process_input_scratch: Vec<f32>,
-    
+
     // アロケーション削減のための作業用バッファ (Callbackの出力受け取り用)
     process_output_scratch: Vec<f32>,
 }
@@ -38,8 +38,7 @@ impl BlockGatherer {
         input_slice: &[f32],
         output_slice: &mut [f32],
         mut process_callback: F,
-    ) 
-    where
+    ) where
         F: FnMut(&[f32], &mut [f32]),
     {
         // 1. 入力を溜める
@@ -54,7 +53,10 @@ impl BlockGatherer {
             }
 
             // B. コールバック実行
-            process_callback(&self.process_input_scratch, &mut self.process_output_scratch);
+            process_callback(
+                &self.process_input_scratch,
+                &mut self.process_output_scratch,
+            );
 
             // C. Output Bufferへの OLA (Overlap-Add) 加算書き込み
             // 処理が重なるため、正しいオフセット位置に加算する必要がある
@@ -85,7 +87,7 @@ impl BlockGatherer {
         // ここから hop_size 分だけ取り出すのがストリーム処理の基本だが、
         // DAWからの要求量 (output_slice.len()) は任意。
         // なので、あるだけ出す。足りなければ0埋め。
-        
+
         for sample in output_slice.iter_mut() {
             if let Some(val) = self.output_buffer.pop_front() {
                 *sample = val;
@@ -94,7 +96,7 @@ impl BlockGatherer {
             }
         }
     }
-    
+
     pub fn latency_samples(&self) -> u32 {
         (self.window_size - self.hop_size) as u32
     }
@@ -109,16 +111,16 @@ mod tests {
         let win = 16;
         let hop = 4;
         let mut gatherer = BlockGatherer::new(win, hop);
-        
+
         // 100 samples of 1.0
-        let input = vec![1.0; 100]; 
+        let input = vec![1.0; 100];
         let mut output = vec![0.0; 100];
-        
+
         // Thru callback: copy input scratch to output scratch
         gatherer.process_stream(&input, &mut output, |src, dst| {
-            dst.copy_from_slice(src); 
+            dst.copy_from_slice(src);
         });
-        
+
         // Check Transient: The first samples should reflect the OLA buildup.
         // Index 0: 1 block contributes -> 1.0
         // Index 4: 2 blocks contribute -> 2.0
@@ -128,9 +130,9 @@ mod tests {
         assert_eq!(output[4], 2.0, "Index 4 should be 2.0");
         assert_eq!(output[8], 3.0, "Index 8 should be 3.0");
         assert_eq!(output[12], 4.0, "Index 12 should reach steady state 4.0");
-        
-        // Check Signal: after latency, it should be 1.0 (assuming perfect OLA if we did fancy windowing, 
-        // but here we just copy blocks. 
+
+        // Check Signal: after latency, it should be 1.0 (assuming perfect OLA if we did fancy windowing,
+        // but here we just copy blocks.
         // Overlap-Add of constant 1.0 blocks with Rect window:
         // Overlap factor = win / hop = 16 / 4 = 4.
         // Result should be 4.0 if we just add them up.
@@ -140,8 +142,11 @@ mod tests {
         // We add 1.0 to the buffer.
         // Overlap 4x.
         // So the steady state output should be 4.0.
-        
+
         // Let's check indices after initial transient (e.g. at index 50)
-        assert_eq!(output[50], 4.0, "Steady state should be overlap count (4.0)");
+        assert_eq!(
+            output[50], 4.0,
+            "Steady state should be overlap count (4.0)"
+        );
     }
 }

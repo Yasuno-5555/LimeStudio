@@ -14,15 +14,15 @@ impl Safety {
             // FTZ: bit 15, DAZ: bit 6
             _mm_setcsr(_mm_getcsr() | 0x8040);
         }
-        
-        // Note: aarch64 (Apple Silicon) does not have the same "Denormal penalty" 
+
+        // Note: aarch64 (Apple Silicon) does not have the same "Denormal penalty"
         // as x86, but many implementations still use FTZ via the FPCR register.
     }
 
     /// リアルタイムスレッドでのメモリアロケーション、ロック、I/Oが
     /// 発生していないかを監視するためのフック（将来の拡張用）。
     pub fn assert_rt_safe() {
-        // TODO: Use a library like `assert_no_alloc` or custom TLS flags 
+        // TODO: Use a library like `assert_no_alloc` or custom TLS flags
         // to detect unsafe operations on the audio thread.
     }
 }

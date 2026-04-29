@@ -1,11 +1,11 @@
 //! Host Attach Layer (The Hell)
-//! 
+//!
 //! Isolating host-specific quirks and window handle management.
 
-pub mod vst3_attach;
 pub mod clap_attach;
-pub mod standalone;
 pub mod host_quirks;
+pub mod standalone;
+pub mod vst3_attach;
 
 pub enum HostType {
     Cubase,
@@ -48,7 +48,7 @@ impl CompatibilityMatrix {
                 resize_works: true,
                 focus_stealing: false,
                 keyboard_transparency: true,
-            }
+            },
         }
     }
 }

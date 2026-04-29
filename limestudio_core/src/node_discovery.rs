@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
-use serde::{Serialize, Deserialize};
 use dirtydata_core::types::TypedPort;
-use std::path::Path;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs;
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SignalUnit {
@@ -52,7 +52,9 @@ pub struct NodeRegistry {
 }
 
 impl Default for NodeRegistry {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NodeRegistry {
@@ -61,7 +63,7 @@ impl NodeRegistry {
             blueprints: BTreeMap::new(),
         };
         registry.populate_standard_library();
-        
+
         // §NDM: Discovery Mechanism — Automatic expansion
         if let Ok(workspace_root) = std::env::current_dir() {
             let search_path = workspace_root.join("DirtyData/crates");
@@ -69,7 +71,7 @@ impl NodeRegistry {
                 let _ = registry.discover_nodes(&search_path);
             }
         }
-        
+
         registry
     }
 
@@ -100,7 +102,7 @@ impl NodeRegistry {
 
     fn parse_blueprint_toml(&self, value: &toml::Value) -> Option<NodeBlueprint> {
         let b = value.get("blueprint")?;
-        
+
         let id_name = b.get("id_name")?.as_str()?.to_string();
         let display_name = b.get("display_name")?.as_str()?.to_string();
         let category = b.get("category")?.as_str()?.to_string();
@@ -112,12 +114,15 @@ impl NodeRegistry {
             "Forbidden" => NodeTier::Forbidden,
             _ => NodeTier::Experimental,
         };
-        
+
         let version = b.get("version")?.as_str()?.to_string();
-        let tags = b.get("tags")?.as_array()?.iter()
+        let tags = b
+            .get("tags")?
+            .as_array()?
+            .iter()
             .filter_map(|v| v.as_str().map(|s| s.to_string()))
             .collect();
-            
+
         let mut params = Vec::new();
         if let Some(p_list) = value.get("params").and_then(|v| v.as_array()) {
             for p in p_list {
@@ -132,9 +137,17 @@ impl NodeRegistry {
                 };
                 let default = p.get("default")?.as_float()? as f32;
                 let range_arr = p.get("range")?.as_array()?;
-                let range = (range_arr[0].as_float()? as f32, range_arr[1].as_float()? as f32);
-                
-                params.push(ParamDefinition { name, unit, default, range });
+                let range = (
+                    range_arr[0].as_float()? as f32,
+                    range_arr[1].as_float()? as f32,
+                );
+
+                params.push(ParamDefinition {
+                    name,
+                    unit,
+                    default,
+                    range,
+                });
             }
         }
 
@@ -159,15 +172,16 @@ impl NodeRegistry {
     }
 
     pub fn find_by_category(&self, category: &str) -> Vec<&NodeBlueprint> {
-        self.blueprints.values()
+        self.blueprints
+            .values()
             .filter(|b| b.category == category)
             .collect()
     }
 
     pub fn find_by_tier(&self, tier: NodeTier) -> Vec<&NodeBlueprint> {
-        self.blueprints.values()
+        self.blueprints
+            .values()
             .filter(|b| b.tier == tier)
             .collect()
     }
 }
-

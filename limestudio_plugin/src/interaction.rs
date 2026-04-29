@@ -1,6 +1,6 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 use std::sync::RwLock;
 
 pub struct InteractionStore {
@@ -8,7 +8,9 @@ pub struct InteractionStore {
 }
 
 impl Default for InteractionStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InteractionStore {
@@ -19,8 +21,10 @@ impl InteractionStore {
     }
 
     pub fn set_value(&self, id: &str, value: f32) {
-        if !value.is_finite() { return; }
-        
+        if !value.is_finite() {
+            return;
+        }
+
         let atomic = {
             let read = self.param_values.read().unwrap();
             read.get(id).cloned()

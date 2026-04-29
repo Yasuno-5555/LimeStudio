@@ -1,6 +1,6 @@
-use crate::engine::{VoiceManager, VoiceEvent};
-use rtrb::RingBuffer;
+use crate::engine::{VoiceEvent, VoiceManager};
 use dirtydata_core::ir::Graph;
+use rtrb::RingBuffer;
 
 pub struct TortureSuite {
     manager: VoiceManager,
@@ -18,7 +18,7 @@ impl TortureSuite {
     pub fn stress_variable_buffers(&mut self, total_samples: usize) {
         let mut rng = crate::math::DeterministicRng::seed_from_u64(0x1337);
         let mut processed = 0;
-        
+
         while processed < total_samples {
             let block_size = (rng.next_u64() % 2047 + 1) as usize;
             let block_size = block_size.min(total_samples - processed);
@@ -26,8 +26,9 @@ impl TortureSuite {
             let mut right = vec![0.0; block_size];
             let inputs: &[&[f32]] = &[];
             let outputs: &mut [&mut [f32]] = &mut [&mut left, &mut right];
-            
-            self.manager.process(inputs, outputs, self.manager.sample_rate);
+
+            self.manager
+                .process(inputs, outputs, self.manager.sample_rate);
             processed += block_size;
         }
     }
@@ -36,7 +37,10 @@ impl TortureSuite {
     pub fn stress_lifecycle(&mut self, iterations: usize) {
         for _ in 0..iterations {
             self.manager.reset();
-            self.manager.handle_event(VoiceEvent::NoteOn { pitch: 60, velocity: 0.8 });
+            self.manager.handle_event(VoiceEvent::NoteOn {
+                pitch: 60,
+                velocity: 0.8,
+            });
             let mut left = vec![0.0; 64];
             let mut right = vec![0.0; 64];
             let outputs: &mut [&mut [f32]] = &mut [&mut left, &mut right];
@@ -48,7 +52,7 @@ impl TortureSuite {
     pub fn stress_sample_rate(&mut self, iterations: usize) {
         let mut rng = crate::math::DeterministicRng::seed_from_u64(0x42);
         let rates = [44100.0, 48000.0, 88200.0, 96000.0];
-        
+
         for _ in 0..iterations {
             let sr = rates[(rng.next_u64() as usize) % rates.len()];
             let mut left = vec![0.0; 128];

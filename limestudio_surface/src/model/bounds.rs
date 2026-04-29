@@ -1,5 +1,5 @@
-use glam::Vec2;
 use crate::model::geometry::Rect;
+use glam::Vec2;
 
 /// Axis-Aligned Bounding Box.
 #[derive(Debug, Clone, Copy, Default)]
@@ -33,13 +33,17 @@ impl Bounds {
     }
 
     pub fn intersects(&self, other: &Self) -> bool {
-        self.min.x <= other.max.x && self.max.x >= other.min.x &&
-        self.min.y <= other.max.y && self.max.y >= other.min.y
+        self.min.x <= other.max.x
+            && self.max.x >= other.min.x
+            && self.min.y <= other.max.y
+            && self.max.y >= other.min.y
     }
 
     pub fn contains(&self, point: Vec2) -> bool {
-        point.x >= self.min.x && point.x <= self.max.x &&
-        point.y >= self.min.y && point.y <= self.max.y
+        point.x >= self.min.x
+            && point.x <= self.max.x
+            && point.y >= self.min.y
+            && point.y <= self.max.y
     }
 
     pub fn center(&self) -> Vec2 {

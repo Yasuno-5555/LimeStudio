@@ -1,5 +1,5 @@
 //! SDF Rendering Module
-//! 
+//!
 //! Handles GPU pipelines for Signed Distance Field shapes.
 //! Optimized for high-density instancing of knobs and rings.
 
@@ -15,7 +15,7 @@ pub struct SdfInstance {
     pub modulation_depth: f32,
     pub modulation_current: f32,
     pub _pad: u32,
-    pub params: Vec4, // [r1, r2, r3, r4]
+    pub params: Vec4,  // [r1, r2, r3, r4]
     pub params2: Vec4, // [r5, r6, r7, r8]
 }
 
@@ -30,10 +30,10 @@ impl SdfPipeline {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::include_wgsl!("sdf.wgsl"));
 
-        let global_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("SDF Global Bind Group Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
+        let global_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("SDF Global Bind Group Layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
@@ -42,9 +42,8 @@ impl SdfPipeline {
                         min_binding_size: None,
                     },
                     count: None,
-                },
-            ],
-        });
+                }],
+            });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("SDF Pipeline Layout"),
@@ -148,7 +147,12 @@ impl SdfPipeline {
         queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(instances));
     }
 
-    pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>, global_bind_group: &'a wgpu::BindGroup, num_instances: u32) {
+    pub fn draw<'a>(
+        &'a self,
+        rpass: &mut wgpu::RenderPass<'a>,
+        global_bind_group: &'a wgpu::BindGroup,
+        num_instances: u32,
+    ) {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, global_bind_group, &[]);
         rpass.set_vertex_buffer(0, self.instance_buffer.slice(..));

@@ -1,6 +1,8 @@
-use glam::Vec2;
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, FrameStyle, TemporalStrategy, IndicatorKind, GlyphPlacement, SurfaceId};
+use crate::ui_ir::{
+    FrameStyle, GlyphPlacement, IndicatorKind, SurfaceId, SurfacePrimitive, TemporalStrategy,
+};
+use glam::Vec2;
 
 pub struct SurfaceDropDown {
     pub id: SurfaceId,
@@ -22,7 +24,13 @@ pub struct DropDownColors {
 }
 
 impl SurfaceDropDown {
-    pub fn new(id: SurfaceId, param_id: String, label: String, position: Vec2, options: Vec<String>) -> Self {
+    pub fn new(
+        id: SurfaceId,
+        param_id: String,
+        label: String,
+        position: Vec2,
+        options: Vec<String>,
+    ) -> Self {
         Self {
             id,
             param_id,
@@ -48,12 +56,17 @@ impl SurfaceDropDown {
         if self.is_focused {
             primitives.push(SurfacePrimitive::FocusRing {
                 id: self.id,
-                rect: [self.position.x - 2.0, self.position.y - 2.0, self.size.x + 4.0, self.size.y + 4.0],
+                rect: [
+                    self.position.x - 2.0,
+                    self.position.y - 2.0,
+                    self.size.x + 4.0,
+                    self.size.y + 4.0,
+                ],
                 color: Color::ACCENT_BLUE.to_array(),
                 temporal: TemporalStrategy::Standard,
             });
         }
-        
+
         // 1. Base Frame
         primitives.push(SurfacePrimitive::Frame {
             id: self.id,
@@ -64,7 +77,11 @@ impl SurfaceDropDown {
         });
 
         // 2. Selected Text
-        let _selected_text = self.options.get(self.selected_index).cloned().unwrap_or_default();
+        let _selected_text = self
+            .options
+            .get(self.selected_index)
+            .cloned()
+            .unwrap_or_default();
         primitives.push(SurfacePrimitive::GlyphRun {
             placements: vec![GlyphPlacement {
                 glyph_id: 0,
@@ -77,7 +94,12 @@ impl SurfaceDropDown {
         // 3. Arrow (Indicator)
         primitives.push(SurfacePrimitive::Indicator {
             id: self.id,
-            rect: [self.position.x + self.size.x - 24.0, self.position.y + 8.0, 16.0, 16.0],
+            rect: [
+                self.position.x + self.size.x - 24.0,
+                self.position.y + 8.0,
+                16.0,
+                16.0,
+            ],
             kind: IndicatorKind::Radio, // Using radio as a circle placeholder for arrow
             value: if self.is_open { 1.0 } else { 0.0 },
             color: self.colors.highlight.to_array(),
@@ -89,7 +111,12 @@ impl SurfaceDropDown {
             let list_height = (self.options.len() as f32) * self.size.y;
             primitives.push(SurfacePrimitive::Frame {
                 id: self.id,
-                rect: [self.position.x, self.position.y + self.size.y, self.size.x, list_height],
+                rect: [
+                    self.position.x,
+                    self.position.y + self.size.y,
+                    self.size.x,
+                    list_height,
+                ],
                 style: FrameStyle::Standard,
                 color: Color::BG_DEEP.to_array(),
                 temporal: TemporalStrategy::Standard,

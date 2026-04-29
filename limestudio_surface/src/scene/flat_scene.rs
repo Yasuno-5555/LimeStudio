@@ -1,12 +1,12 @@
 //! Lime Surface Flat Scene Graph
-//! 
+//!
 //! Optimized for rendering from DirtyData Graph snapshots and ViewCache.
 
-use glam::Vec2;
 use crate::color::Color;
-use limestudio_core::{ViewCache, UiIndex};
 use dirtydata_core::ir::Graph;
 use dirtydata_core::types::StableId;
+use glam::Vec2;
+use limestudio_core::{UiIndex, ViewCache};
 
 pub struct SurfaceScene {
     pub nodes: Vec<SurfaceNode>,
@@ -44,7 +44,9 @@ pub enum OverlayContent {
 }
 
 impl Default for SurfaceScene {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl SurfaceScene {
     pub fn new() -> Self {
@@ -59,12 +61,13 @@ impl SurfaceScene {
     pub fn reconcile(&mut self, graph: &Graph, view_cache: &ViewCache) {
         self.nodes.clear();
         self.edges.clear();
-        
+
         // 1. Build Nodes from ViewCache positions
         for (&kernel_id, &pos) in &view_cache.node_positions {
             if let Some(ui_index) = view_cache.id_map.get_ui_index(kernel_id) {
                 let label = if let Some(node) = graph.node(&kernel_id) {
-                    node.config.get("name")
+                    node.config
+                        .get("name")
                         .and_then(|v| v.as_string())
                         .cloned()
                         .unwrap_or_else(|| format!("{:?}", node.kind))
@@ -94,7 +97,7 @@ impl SurfaceScene {
         for (&edge_id, edge) in &graph.topology.edges {
             let from_pos = view_cache.node_positions.get(&edge.source.node_id);
             let to_pos = view_cache.node_positions.get(&edge.target.node_id);
-            
+
             if let (Some(fp), Some(tp)) = (from_pos, to_pos) {
                 self.edges.push(SurfaceEdge {
                     kernel_id: edge_id,

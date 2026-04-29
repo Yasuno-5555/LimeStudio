@@ -61,11 +61,15 @@ pub struct CausalityMonitor {
 }
 
 impl Default for CausalityMonitor {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl CausalityMonitor {
     pub fn new() -> Self {
-        Self { poly_traces: Vec::new() }
+        Self {
+            poly_traces: Vec::new(),
+        }
     }
 
     pub fn push_event(&mut self, voice: u32, source: &str, impact: Vec<StableId>, time: u64) {
@@ -75,7 +79,7 @@ impl CausalityMonitor {
             impact_nodes: impact,
             timestamp: time,
         });
-        
+
         // Keep only recent traces
         if self.poly_traces.len() > 1024 {
             self.poly_traces.remove(0);

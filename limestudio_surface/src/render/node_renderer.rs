@@ -1,5 +1,5 @@
-use wgpu::*;
 use glam::{Vec2, Vec4};
+use wgpu::*;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -35,19 +35,17 @@ impl NodeRenderer {
                 module: &shader,
                 entry_point: "vs_main",
                 compilation_options: Default::default(),
-                buffers: &[
-                    VertexBufferLayout {
-                        array_stride: std::mem::size_of::<NodeInstance>() as BufferAddress,
-                        step_mode: VertexStepMode::Instance,
-                        attributes: &vertex_attr_array![
-                            0 => Float32x2, // position
-                            1 => Float32x2, // size
-                            2 => Float32x4, // color
-                            3 => Float32,   // corner_radius
-                            4 => Float32,   // border_thickness
-                        ],
-                    },
-                ],
+                buffers: &[VertexBufferLayout {
+                    array_stride: std::mem::size_of::<NodeInstance>() as BufferAddress,
+                    step_mode: VertexStepMode::Instance,
+                    attributes: &vertex_attr_array![
+                        0 => Float32x2, // position
+                        1 => Float32x2, // size
+                        2 => Float32x4, // color
+                        3 => Float32,   // corner_radius
+                        4 => Float32,   // border_thickness
+                    ],
+                }],
             },
             fragment: Some(FragmentState {
                 module: &shader,

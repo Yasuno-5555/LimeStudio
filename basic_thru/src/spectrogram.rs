@@ -1,29 +1,32 @@
 use nih_plug_vizia::vizia::prelude::*;
-use nih_plug_vizia::vizia::vg::{ImageId, Paint, Path, PixelFormat, ImageFlags}; // femtovg
-use std::sync::Arc;
+use nih_plug_vizia::vizia::vg::{ImageFlags, ImageId, Paint, Path, PixelFormat}; // femtovg
 use std::cell::RefCell;
+use std::sync::Arc;
 
 pub struct Spectrogram {
     // 外部から渡されるデータ受信機
     #[allow(clippy::type_complexity)]
     consumer: RefCell<ringbuf::Consumer<Vec<f32>, Arc<ringbuf::HeapRb<Vec<f32>>>>>,
-    
+
     // 描画用の内部状態
     image_id: RefCell<Option<ImageId>>, // GPUテクスチャID
     pixel_buffer: RefCell<Vec<u8>>,     // CPU側のRGBAバッファ
-    
+
     // サイズ設定
     width: usize,
     height: usize,
 }
 
 impl Spectrogram {
-    pub fn new(cx: &mut Context, consumer: ringbuf::Consumer<Vec<f32>, Arc<ringbuf::HeapRb<Vec<f32>>>>) -> Handle<'_, Self> {
+    pub fn new(
+        cx: &mut Context,
+        consumer: ringbuf::Consumer<Vec<f32>, Arc<ringbuf::HeapRb<Vec<f32>>>>,
+    ) -> Handle<'_, Self> {
         // 例: 幅512px, 高さ256px のスペクトログラム
         // GUI上の表示サイズとは独立した「内部解像度」
         let width = 512;
         let height = 256;
-        
+
         // 黒で初期化 (RGBA = 4 bytes per pixel)
         let buffer = vec![0; width * height * 4];
 
@@ -41,19 +44,23 @@ impl Spectrogram {
     fn magnitude_to_color(mag: f32) -> (u8, u8, u8, u8) {
         // 1. 振幅を加算して安定させる (0除算防止)
         let db = 20.0 * (mag + 1e-6).log10();
-        
+
         // 2. 表示レンジの設定 (例: -60dB ~ 0dB)
-        let min_db = -60.0; 
+        let min_db = -60.0;
         let max_db = 0.0;
-        
+
         // 3. 0.0 ~ 1.0 に正規化
         let norm = ((db - min_db) / (max_db - min_db)).clamp(0.0, 1.0);
-        
+
         // 4. 色変換 (ヒートマップ: 黒->青->赤->黄)
         let r = (norm * 255.0) as u8;
         let b = ((1.0 - norm) * 255.0) as u8;
-        let g = if norm > 0.8 { ((norm - 0.8) * 5.0 * 255.0) as u8 } else { 0 }; 
-        
+        let g = if norm > 0.8 {
+            ((norm - 0.8) * 5.0 * 255.0) as u8
+        } else {
+            0
+        };
+
         (r, g, b, 255)
     }
 
@@ -62,16 +69,16 @@ impl Spectrogram {
     fn update_buffer(&self) -> bool {
         let mut consumer = self.consumer.borrow_mut();
         let mut dirty = false;
-        
+
         // キューに溜まっている分を全て処理して、最新の状態まで進める（あるいは全部描く）
         // ここでは「溜まっている分だけスクロール」させることで、高速な更新にも追従させる
         // ただし、1フレームで進みすぎると見にくいので制限をかけてもいい
-        
+
         let mut _processed_some = false;
-        
+
         // バッファを借用
         let mut buffer = self.pixel_buffer.borrow_mut();
-        
+
         // Max 4 columns per frame to prevent freezing if queue is full
         let max_cols = 4;
         let mut cols = 0;
@@ -79,7 +86,7 @@ impl Spectrogram {
         while let Some(spectrum) = consumer.pop() {
             dirty = true;
             _processed_some = true;
-            
+
             // 1. 画像全体を左に1ピクセルずらす
             let _row_bytes = self.width * 4;
             // メモリコピーによるシフト
@@ -103,18 +110,18 @@ impl Spectrogram {
                     // So y=0 (top) should be High Freq? Usually yes.
                     // But spectrogram convention: bottom is low freq.
                     // height-1 (bottom) -> 0Hz.
-                    
+
                     // Simple linear mapping for now (Log is better but linear is easier to verify bins)
                     let bin_index = (self.height - 1 - y) * spec_len / self.height;
-                    
+
                     let mag = if bin_index < spec_len {
                         spectrum[bin_index]
                     } else {
                         0.0
                     };
-                    
+
                     let (r, g, b, a) = Self::magnitude_to_color(mag);
-                    
+
                     let pixel_idx = (y * self.width + (self.width - 1)) * 4;
                     buffer[pixel_idx] = r;
                     buffer[pixel_idx + 1] = g;
@@ -122,16 +129,16 @@ impl Spectrogram {
                     buffer[pixel_idx + 3] = a;
                 }
             }
-            
+
             cols += 1;
             if cols >= max_cols {
                 break;
             }
         }
-        
+
         // もしキューがつまってたら最新まで飛ばすべきだが、リングバッファなのでConsumer側でDrainしない限り残る。
         // ここでは最大4列描いたら抜けることにする（残りは次のフレームで）。
-        
+
         dirty
     }
 }
@@ -143,15 +150,17 @@ impl View for Spectrogram {
 
         // 2. GPUテクスチャの作成または更新
         let mut image_id = self.image_id.borrow_mut();
-        
+
         if image_id.is_none() {
             // 初回作成
-            let id = canvas.create_image_empty(
-                self.width, 
-                self.height, 
-                PixelFormat::Rgba8, 
-                ImageFlags::NEAREST
-            ).expect("Failed to create spectrogram texture");
+            let id = canvas
+                .create_image_empty(
+                    self.width,
+                    self.height,
+                    PixelFormat::Rgba8,
+                    ImageFlags::NEAREST,
+                )
+                .expect("Failed to create spectrogram texture");
             *image_id = Some(id);
         }
 
@@ -165,19 +174,18 @@ impl View for Spectrogram {
                 let img_ref = nih_plug_vizia::vizia::vg::imgref::ImgRef::new(
                     rgba_buffer,
                     self.width,
-                    self.height
+                    self.height,
                 );
-                canvas.update_image(id, img_ref, 0, 0)
-                    .unwrap(); // update_image returns Result
+                canvas.update_image(id, img_ref, 0, 0).unwrap(); // update_image returns Result
             }
 
             // 3. 描画 (矩形塗りつぶし)
             let bounds = cx.bounds();
-            
+
             // ImagePaint
             // x, y, w, h, angle, alpha
             let paint = Paint::image(id, bounds.x, bounds.y, bounds.w, bounds.h, 0.0, 1.0);
-            
+
             let mut path = Path::new();
             path.rect(bounds.x, bounds.y, bounds.w, bounds.h);
             canvas.fill_path(&path, &paint);

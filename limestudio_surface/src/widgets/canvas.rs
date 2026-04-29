@@ -1,12 +1,12 @@
 //! GraphCanvas — The foundation of the Visible Compiler.
-//! 
+//!
 //! Handles pan, zoom, and spatial navigation.
 //! Selection is driven by ViewCache (Perception).
 
-use glam::Vec2;
-use limestudio_core::{UiIndex};
 use crate::color::Color;
-use crate::ui_ir::{SurfacePrimitive, FrameStyle, TemporalStrategy, SurfaceId};
+use crate::ui_ir::{FrameStyle, SurfaceId, SurfacePrimitive, TemporalStrategy};
+use glam::Vec2;
+use limestudio_core::UiIndex;
 
 pub struct GraphCanvas {
     pub id: SurfaceId,
@@ -42,7 +42,7 @@ impl GraphCanvas {
     pub fn handle_zoom(&mut self, delta: f32, focus_screen: Vec2) {
         let focus_world = self.screen_to_world(focus_screen);
         let new_zoom = (self.zoom * (1.0 + delta)).clamp(0.1, 5.0);
-        
+
         self.zoom = new_zoom;
         let new_focus_screen = self.world_to_screen(focus_world);
         self.pan -= new_focus_screen - focus_screen;

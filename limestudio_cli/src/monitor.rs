@@ -1,12 +1,12 @@
-use ratatui::{
-    backend::CrosstermBackend,
-    widgets::{Block, Borders, Sparkline},
-    Terminal,
-};
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{
+    backend::CrosstermBackend,
+    widgets::{Block, Borders, Sparkline},
+    Terminal,
 };
 use std::io;
 use std::time::{Duration, Instant};
@@ -37,13 +37,17 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> anyhow::
     let tick_rate = Duration::from_millis(50);
     let mut last_tick = Instant::now();
     let mut data = vec![0u64; 100];
-    let mut phase = 0.0;
+    let mut phase: f64 = 0.0;
 
     loop {
         terminal.draw(|f| {
             let size = f.size();
             let sparkline = Sparkline::default()
-                .block(Block::default().title(" LIME LIVE WAVEFORM (Monitor) ").borders(Borders::ALL))
+                .block(
+                    Block::default()
+                        .title(" LIME LIVE WAVEFORM (Monitor) ")
+                        .borders(Borders::ALL),
+                )
                 .data(&data)
                 .style(ratatui::style::Style::default().fg(ratatui::style::Color::Cyan));
             f.render_widget(sparkline, size);

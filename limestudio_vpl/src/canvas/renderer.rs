@@ -1,7 +1,7 @@
 use eframe::egui;
 use eframe::egui_wgpu;
 use eframe::egui_wgpu::wgpu;
-use limestudio_surface::render::sdf::{SdfPipeline, SdfInstance};
+use limestudio_surface::render::sdf::{SdfInstance, SdfPipeline};
 
 pub struct CanvasRenderer {
     pub pipeline: Option<SdfPipeline>,
@@ -15,7 +15,9 @@ unsafe impl Send for TrustCanvasCallback {}
 unsafe impl Sync for TrustCanvasCallback {}
 
 impl Default for CanvasRenderer {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CanvasRenderer {
@@ -30,9 +32,14 @@ impl CanvasRenderer {
         }
     }
 
-    pub fn render(&self, ui: &mut egui::Ui, rect: egui::Rect, raw_instances: Vec<SdfInstance>) -> egui::Response {
+    pub fn render(
+        &self,
+        ui: &mut egui::Ui,
+        rect: egui::Rect,
+        raw_instances: Vec<SdfInstance>,
+    ) -> egui::Response {
         let (response, painter) = ui.allocate_painter(rect.size(), egui::Sense::drag());
-        
+
         // Custom egui-wgpu callback for the "Trust Canvas"
         let callback = egui_wgpu::Callback::new_paint_callback(
             rect,
@@ -40,7 +47,7 @@ impl CanvasRenderer {
                 sdf_instances: raw_instances,
             },
         );
-        
+
         painter.add(callback);
         response
     }

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use crate::engine::{VoiceEvent, VoiceManager};
     use crate::graph::GraphBuilder;
-    use crate::engine::{VoiceManager, VoiceEvent};
     use crate::PatchEvent;
     use rtrb::RingBuffer;
     use std::f32::consts::PI;
@@ -14,11 +14,14 @@ mod tests {
         let input = builder.input_node();
         let output = builder.output_node();
         builder.connect(input, output); // Straight wire
-        
+
         let graph = builder.build();
         let (_, cons) = RingBuffer::<PatchEvent>::new(64);
         let mut engine = VoiceManager::from_graph(&graph, cons, 1, 44100.0, None);
-        engine.handle_event(VoiceEvent::NoteOn { pitch: 60, velocity: 1.0 });
+        engine.handle_event(VoiceEvent::NoteOn {
+            pitch: 60,
+            velocity: 1.0,
+        });
 
         let samples = 512;
         let in_data = vec![0.12345f32; samples];
@@ -30,8 +33,16 @@ mod tests {
         engine.process(&inputs, &mut outputs, 44100.0);
 
         for (i, (l, r)) in out_l.iter().zip(out_r.iter()).enumerate().take(samples) {
-            assert_eq!(*l, 0.12345f32, "Left channel integrity failed at sample {}", i);
-            assert_eq!(*r, 0.12345f32, "Right channel integrity failed at sample {}", i);
+            assert_eq!(
+                *l, 0.12345f32,
+                "Left channel integrity failed at sample {}",
+                i
+            );
+            assert_eq!(
+                *r, 0.12345f32,
+                "Right channel integrity failed at sample {}",
+                i
+            );
         }
     }
 
@@ -43,11 +54,14 @@ mod tests {
         let input = builder.input_node();
         let output = builder.output_node();
         builder.connect(input, output);
-        
+
         let graph = builder.build();
         let (_, cons) = RingBuffer::<PatchEvent>::new(64);
         let mut engine = VoiceManager::from_graph(&graph, cons, 1, 44100.0, None);
-        engine.handle_event(VoiceEvent::NoteOn { pitch: 60, velocity: 1.0 });
+        engine.handle_event(VoiceEvent::NoteOn {
+            pitch: 60,
+            velocity: 1.0,
+        });
 
         let samples = 44100; // 1 second
         let mut in_data = vec![0.0f32; samples];
@@ -58,7 +72,7 @@ mod tests {
 
         let mut out_l = vec![0.0f32; samples];
         let mut out_r = vec![0.0f32; samples];
-        
+
         // Process in blocks to simulate real usage
         let block_size = 128;
         for i in (0..samples).step_by(block_size) {
@@ -70,7 +84,12 @@ mod tests {
 
         for i in 0..samples {
             let diff = (out_l[i] - in_data[i]).abs();
-            assert!(diff < 1e-5, "Linearity failed at sample {}: diff={}", i, diff);
+            assert!(
+                diff < 1e-5,
+                "Linearity failed at sample {}: diff={}",
+                i,
+                diff
+            );
         }
     }
 
@@ -81,14 +100,23 @@ mod tests {
         let mut builder = GraphBuilder::new();
         let input = builder.input_node();
         let output = builder.output_node();
-        let gain = builder.add_processor("Gain", vec![("gain", crate::graph::ParamSource::Parameter("gain".to_string()))]);
+        let gain = builder.add_processor(
+            "Gain",
+            vec![(
+                "gain",
+                crate::graph::ParamSource::Parameter("gain".to_string()),
+            )],
+        );
         builder.connect(input, gain);
         builder.connect(gain, output);
-        
+
         let graph = builder.build();
         let (mut prod, cons) = RingBuffer::<PatchEvent>::new(1024);
         let mut engine = VoiceManager::from_graph(&graph, cons, 1, 44100.0, None);
-        engine.handle_event(VoiceEvent::NoteOn { pitch: 60, velocity: 1.0 });
+        engine.handle_event(VoiceEvent::NoteOn {
+            pitch: 60,
+            velocity: 1.0,
+        });
 
         let iterations = 1000;
         let in_l = vec![1.0f32; 64];
@@ -101,10 +129,13 @@ mod tests {
         for i in 0..iterations {
             let val = (i as f32 * 0.001).sin();
             // Rapid automation spam
-            let _ = prod.push(PatchEvent::SetParameter { param_id: "gain".to_string(), value: val });
-            
+            let _ = prod.push(PatchEvent::SetParameter {
+                param_id: "gain".to_string(),
+                value: val,
+            });
+
             engine.process(&inputs, &mut outputs, 44100.0);
-            
+
             // Should not crash and should update value (eventually)
             assert!(outputs[0][0].is_finite());
         }
