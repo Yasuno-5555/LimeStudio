@@ -104,12 +104,25 @@ impl ParamKnob {
     }
 
     /// Convert the knob state into low-level surface primitives.
-    /// Follows the "Law of Lime" (HIG v3.0).
+    /// Follows the "Law of Lime" (HIG v3.0) with Sentient Enhancements.
     pub fn build_primitives(&self) -> Vec<SurfacePrimitive> {
         let mut primitives = Vec::new();
         let center = [self.position.x, self.position.y];
 
-        // 0. Focus Ring (The Civilization)
+        // 0. Sentient Aura (The Life)
+        primitives.push(SurfacePrimitive::Organic {
+            id: SurfaceId::from_seed(&format!("aura_{}", self.id.0 .0)),
+            kind: crate::ui_ir::OrganicKind::Aura {
+                center,
+                radius: self.radius * 1.5,
+                pulsation: self.state.value.value * 0.2, // Pulse based on value
+                harmonics: 2,
+            },
+            brush: crate::ui_ir::BespokeBrush::Solid([0.6, 1.0, 0.4, 0.1]),
+            temporal: TemporalStrategy::Slow,
+        });
+
+        // 0.1 Focus Ring (The Civilization)
         if self.is_focused {
             primitives.push(SurfacePrimitive::FocusRing {
                 id: self.id,
@@ -170,6 +183,14 @@ impl ParamKnob {
                 end_angle: mod_end,
                 kind: ArcKind::Modulation,
                 temporal: TemporalStrategy::Fast, // 20ms for modulation
+            });
+
+            // Add Persistence Trail for modulation
+            primitives.push(SurfacePrimitive::PersistenceTrail {
+                id: SurfaceId::from_seed(&format!("mod_trail_{}", self.id.0 .0)),
+                source_id: self.id,
+                depth: 8,
+                decay: 0.8,
             });
         }
 

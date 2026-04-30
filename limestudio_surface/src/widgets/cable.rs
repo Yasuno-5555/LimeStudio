@@ -54,13 +54,25 @@ impl SemanticCable {
             CurveKind::Cable
         };
 
-        vec![SurfacePrimitive::Curve {
+        let mut primitives = vec![SurfacePrimitive::Curve {
             id: self.id,
             control_points: vec![[self.start.x, self.start.y], [self.end.x, self.end.y]],
             kind,
             thickness,
             color: color.to_array(),
             temporal: TemporalStrategy::Fast,
-        }]
+        }];
+
+        // Add Persistence Trail for signal flow
+        if self.energy > 0.1 {
+            primitives.push(SurfacePrimitive::PersistenceTrail {
+                id: SurfaceId::from_seed(&format!("cable_trail_{}", self.id.0 .0)),
+                source_id: self.id,
+                depth: 10,
+                decay: 0.6,
+            });
+        }
+
+        primitives
     }
 }

@@ -4,6 +4,38 @@
 use serde::{Deserialize, Serialize};
 
 pub use crate::model::stable_id::SurfaceId;
+use std::any::Any;
+use std::sync::Arc;
+
+/// The Sentient Kernel: Manages reactive state and lifecycle.
+/// "Consciousness is a persistent state across frames."
+pub struct SurfaceKernel {
+    pub state_store: std::collections::HashMap<SurfaceId, Arc<dyn Any + Send + Sync>>,
+    pub signal_registry: std::collections::HashMap<SignalId, Arc<dyn Any + Send + Sync>>,
+    pub history_store:
+        std::collections::HashMap<SurfaceId, std::collections::VecDeque<SurfacePrimitive>>,
+    pub generation: u64,
+}
+
+impl SurfaceKernel {
+    pub fn new() -> Self {
+        Self {
+            state_store: std::collections::HashMap::new(),
+            signal_registry: std::collections::HashMap::new(),
+            history_store: std::collections::HashMap::new(),
+            generation: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SignalId(pub ulid::Ulid);
+
+impl SignalId {
+    pub fn generate() -> Self {
+        Self(ulid::Ulid::new())
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DisplaySignal {
@@ -209,6 +241,35 @@ impl SurfaceWidget {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SurfacePrimitive {
+    /// Organic: Bespoke GPU-driven field primitives.
+    /// These transcend standard vector paths.
+    Organic {
+        id: SurfaceId,
+        kind: OrganicKind,
+        brush: BespokeBrush,
+        temporal: TemporalStrategy,
+    },
+    /// Path: Bespoke Vector Path (Internalized Vello-like segments)
+    Path {
+        id: SurfaceId,
+        segments: Vec<PathSegment>,
+        brush: BespokeBrush,
+        stroke: Option<StrokeStyle>,
+    },
+    /// PersistenceTrail: Temporal memory of a primitive.
+    PersistenceTrail {
+        id: SurfaceId,
+        source_id: SurfaceId,
+        depth: usize,
+        decay: f32,
+    },
+    /// CausalityBridge: Visual link between two logical entities.
+    CausalityBridge {
+        id: SurfaceId,
+        from_id: SurfaceId,
+        to_id: SurfaceId,
+        intensity: f32,
+    },
     /// Frame: Standardized UI regions
     Frame {
         id: SurfaceId,
@@ -364,6 +425,107 @@ pub enum SurfacePrimitive {
         texture_id: u32,
         color: [f32; 4],
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum OrganicKind {
+    /// Aura: A pulsing, organic field around a point.
+    Aura {
+        center: [f32; 2],
+        radius: f32,
+        pulsation: f32, // 0.0 to 1.0
+        harmonics: u32,
+    },
+    /// Flow: A directional, liquid-like stream.
+    Flow {
+        points: Vec<[f32; 2]>,
+        velocity: f32,
+        density: f32,
+    },
+    /// Pulse: A momentary burst of visual energy.
+    /// Used for: Impact detection, trigger events.
+    Pulse {
+        center: [f32; 2],
+        intensity: f32,
+        decay: f32,
+    },
+    /// LiveStream: Direct link to a DSP signal.
+    /// This is the "Sample-Accurate" primitive.
+    LiveStream {
+        id: SignalId,
+        mapping: AudioMapping,
+        thickness: f32,
+    },
+    /// Uncertainty: Fuzzy area representing signal noise or jitter.
+    Uncertainty {
+        center: [f32; 2],
+        radius: f32,
+        entropy: f32,
+    },
+    /// HarmonicGrid: Forensic guide based on frequency ratios.
+    HarmonicGrid {
+        rect: [f32; 4],
+        root_freq: f32,
+        harmonics: u32,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum AudioMapping {
+    Linear,
+    Logarithmic,
+    FrequencyHz,
+    Decibel,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PathSegment {
+    MoveTo([f32; 2]),
+    LineTo([f32; 2]),
+    QuadTo([f32; 2], [f32; 2]),
+    CurveTo([f32; 2], [f32; 2], [f32; 2]),
+    Close,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum BespokeBrush {
+    Solid([f32; 4]),
+    LinearGradient {
+        start: [f32; 2],
+        end: [f32; 2],
+        stops: Vec<([f32; 4], f32)>,
+    },
+    RadialGradient {
+        center: [f32; 2],
+        radius: f32,
+        stops: Vec<([f32; 4], f32)>,
+    },
+    /// SignalDriven: Brush properties are modulated by an external signal.
+    SignalDriven {
+        base_color: [f32; 4],
+        signal_factor: f32,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StrokeStyle {
+    pub thickness: f32,
+    pub cap: LineCap,
+    pub join: LineJoin,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum LineCap {
+    Flat,
+    Round,
+    Square,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum LineJoin {
+    Miter,
+    Round,
+    Bevel,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

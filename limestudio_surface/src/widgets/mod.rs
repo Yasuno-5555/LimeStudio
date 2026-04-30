@@ -18,4 +18,5 @@ pub mod slider;
 pub mod text_input;
 pub mod toggle;
 pub mod trait_def;
+pub mod ui;
 pub use trait_def::Widget;

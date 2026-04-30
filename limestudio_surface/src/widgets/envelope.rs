@@ -81,6 +81,14 @@ impl InteractiveEnvelope {
             temporal: TemporalStrategy::Standard,
         });
 
+        // Add Persistence Trail for envelope movement
+        primitives.push(SurfacePrimitive::PersistenceTrail {
+            id: SurfaceId::from_seed(&format!("env_trail_{}", self.id.0 .0)),
+            source_id: self.id,
+            depth: 6,
+            decay: 0.5,
+        });
+
         // 2. Control Points
         for (i, p) in curve_points.iter().enumerate() {
             let is_selected = self.selected_point == Some(i);

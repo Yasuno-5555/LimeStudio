@@ -22,6 +22,9 @@ serde.workspace = true
 glam.workspace = true
 log.workspace = true
 taffy.workspace = true
+vello.workspace = true
+kurbo.workspace = true
+peniko.workspace = true
 tokio = { version = "1", features = ["full"] }
 env_logger = "0.11"
 pollster = { workspace = true }

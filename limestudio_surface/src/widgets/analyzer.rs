@@ -43,7 +43,18 @@ impl Analyzer {
     pub fn build_primitives(&self) -> Vec<SurfacePrimitive> {
         let mut primitives = Vec::new();
 
-        // 1. Background
+        // 1. Sentient Background Glow (The Depth)
+        primitives.push(SurfacePrimitive::Organic {
+            id: SurfaceId::from_seed(&format!("glow_{}", self.id.0 .0)),
+            kind: crate::ui_ir::OrganicKind::Uncertainty {
+                center: [self.position.x + self.size.x * 0.5, self.position.y + self.size.y * 0.5],
+                radius: self.size.x * 0.6,
+                entropy: 0.05,
+            },
+            brush: crate::ui_ir::BespokeBrush::Solid([0.0, 0.5, 0.4, 0.05]),
+            temporal: crate::ui_ir::TemporalStrategy::Slow,
+        });
+
         primitives.push(SurfacePrimitive::PolyShape {
             id: self.id,
             points: vec![

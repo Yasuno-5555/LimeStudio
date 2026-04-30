@@ -134,6 +134,14 @@ impl ParamSlider {
             temporal: TemporalStrategy::Standard,
         });
 
+        // Add Persistence Trail for handle
+        primitives.push(SurfacePrimitive::PersistenceTrail {
+            id: SurfaceId::from_seed(&format!("handle_trail_{}", self.id.0 .0)),
+            source_id: self.id,
+            depth: 12,
+            decay: 0.7,
+        });
+
         primitives
     }
 }

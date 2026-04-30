@@ -53,6 +53,24 @@ impl SurfaceButton {
             });
         }
 
+        // 0. Sentient Interaction Aura
+        if self.is_pressed {
+            primitives.push(SurfacePrimitive::Organic {
+                id: SurfaceId::from_seed(&format!("btn_aura_{}", self.id.0 .0)),
+                kind: crate::ui_ir::OrganicKind::Aura {
+                    center: [
+                        self.position.x + self.size.x * 0.5,
+                        self.position.y + self.size.y * 0.5,
+                    ],
+                    radius: self.size.x * 0.8,
+                    pulsation: 0.5,
+                    harmonics: 3,
+                },
+                brush: crate::ui_ir::BespokeBrush::Solid([0.6, 1.0, 0.4, 0.15]),
+                temporal: TemporalStrategy::Fast,
+            });
+        }
+
         // 1. Background Frame
         primitives.push(SurfacePrimitive::Frame {
             id: self.id,

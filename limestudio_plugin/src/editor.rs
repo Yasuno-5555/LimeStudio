@@ -301,7 +301,7 @@ where
                     // In a real scenario, events would be fed from the OS thread via WaitFreeEventBridge.
                     // Here we simulate the feed by checking for any intents generated during interaction.
                     let intents = engine.take_intents();
-                    
+
                     for intent in intents {
                         match intent {
                             limestudio_surface::runtime::interaction_kernel::InteractionIntent::UpdateParameter { parameter: _, value, node_id } => {

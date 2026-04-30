@@ -47,6 +47,21 @@ impl PdCompat {
             temporal: TemporalStrategy::Fast,
         });
 
+        // Sentient Flash Aura
+        if flash_state > 0.01 {
+            primitives.push(SurfacePrimitive::Organic {
+                id: SurfaceId::from_seed(&format!("bang_aura_{}", id.0 .0)),
+                kind: crate::ui_ir::OrganicKind::Aura {
+                    center: [pos[0] + size * 0.5, pos[1] + size * 0.5],
+                    radius: size * 1.2,
+                    pulsation: flash_state * 0.5,
+                    harmonics: 4,
+                },
+                brush: crate::ui_ir::BespokeBrush::Solid([0.6, 1.0, 0.4, flash_state * 0.2]),
+                temporal: TemporalStrategy::Fast,
+            });
+        }
+
         primitives
     }
 

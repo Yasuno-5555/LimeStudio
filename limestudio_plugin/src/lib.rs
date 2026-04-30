@@ -650,11 +650,17 @@ pub mod ui {
                 interaction: limestudio_surface::ui_ir::InteractionClass::None,
             }
         }
-        pub fn primitives(mut self, primitives: Vec<limestudio_surface::ui_ir::SurfacePrimitive>) -> Self {
+        pub fn primitives(
+            mut self,
+            primitives: Vec<limestudio_surface::ui_ir::SurfacePrimitive>,
+        ) -> Self {
             self.primitives = primitives;
             self
         }
-        pub fn interaction(mut self, interaction: limestudio_surface::ui_ir::InteractionClass) -> Self {
+        pub fn interaction(
+            mut self,
+            interaction: limestudio_surface::ui_ir::InteractionClass,
+        ) -> Self {
             self.interaction = interaction;
             self
         }
@@ -684,12 +690,17 @@ pub mod interaction;
 
 /// Context for the UI build process, providing access to local state.
 pub struct UiContext<'a> {
-    pub(crate) state_store: &'a mut std::collections::HashMap<ui::SurfaceId, Box<dyn std::any::Any + Send>>,
+    pub(crate) state_store:
+        &'a mut std::collections::HashMap<ui::SurfaceId, Box<dyn std::any::Any + Send>>,
 }
 
 impl<'a> UiContext<'a> {
     /// Retrieve or initialize local state for a widget.
-    pub fn use_state<T: Clone + Send + 'static>(&mut self, id: ui::SurfaceId, default: impl FnOnce() -> T) -> T {
+    pub fn use_state<T: Clone + Send + 'static>(
+        &mut self,
+        id: ui::SurfaceId,
+        default: impl FnOnce() -> T,
+    ) -> T {
         self.state_store
             .entry(id)
             .or_insert_with(|| Box::new(default()))

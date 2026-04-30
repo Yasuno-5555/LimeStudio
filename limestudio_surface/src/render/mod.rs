@@ -3,6 +3,7 @@ pub mod lens_renderer;
 pub mod node_renderer;
 pub mod sdf;
 pub mod text_renderer;
+pub mod vello_renderer;
 pub mod waveform_renderer;
 
 #[repr(C)]

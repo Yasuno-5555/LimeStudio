@@ -42,6 +42,7 @@ pub struct SurfaceEngine {
     pub input: runtime::interaction_kernel::InteractionKernel,
     pub camera: scene::camera::InfiniteCamera,
     pub profiler: profiler::FrameProfiler,
+    pub kernel: crate::ui_ir::SurfaceKernel,
 
     // V3-V7 Architecture: Asynchronous Perception
     pub primitive_stream: Arc<Mutex<Vec<SurfacePrimitive>>>,
@@ -63,7 +64,11 @@ pub struct SurfaceEngine {
     // Geometry Cache for Hit Testing
     pub node_geometry: Vec<(SurfaceId, model::geometry::Rect)>,
     pub port_geometry: Vec<(SurfaceId, model::geometry::Circle)>,
-    pub widget_geometry: Vec<(SurfaceId, model::geometry::Rect, crate::ui_ir::InteractionClass)>,
+    pub widget_geometry: Vec<(
+        SurfaceId,
+        model::geometry::Rect,
+        crate::ui_ir::InteractionClass,
+    )>,
     pub pending_intents: Vec<crate::runtime::interaction_kernel::InteractionIntent>,
     pub theme: model::theme::SurfaceTheme,
     pub debug_inspector: bool,
@@ -107,7 +112,7 @@ impl SurfaceEngine {
             time_travel: authority::time_travel::TimeTravelEngine::new(64),
             causal_replay: authority::causal_replay::CausalReplayEngine::new(3.0),
             trust_ledger: model::provenance::TrustLedger::new(),
-
+            kernel: crate::ui_ir::SurfaceKernel::new(),
             taffy: Taffy::new(),
             node_geometry: Vec::new(),
             port_geometry: Vec::new(),
@@ -315,7 +320,11 @@ impl SurfaceEngine {
                     ..Default::default()
                 })
                 .unwrap(),
-            Box { children, layout_style, .. } => {
+            Box {
+                children,
+                layout_style,
+                ..
+            } => {
                 let children_nodes: Vec<_> = children
                     .iter()
                     .map(|c| self.build_taffy_recursive(c))
@@ -470,7 +479,12 @@ impl SurfaceEngine {
         ));
 
         match widget {
-            FocusProxy { id, child, is_focused, .. } => {
+            FocusProxy {
+                id,
+                child,
+                is_focused,
+                ..
+            } => {
                 let node_child = self.taffy.children(node).unwrap()[0];
                 self.generate_primitives_from_layout(child, node_child, primitives, pos, level);
                 if *is_focused {
@@ -507,7 +521,11 @@ impl SurfaceEngine {
                     children: child_primitives,
                 });
             }
-            Layer { level: layer_level, child, .. } => {
+            Layer {
+                level: layer_level,
+                child,
+                ..
+            } => {
                 let node_child = self.taffy.children(node).unwrap()[0];
                 self.generate_primitives_from_layout(
                     child,
@@ -519,13 +537,7 @@ impl SurfaceEngine {
             }
             Memo { child, .. } => {
                 let node_child = self.taffy.children(node).unwrap()[0];
-                self.generate_primitives_from_layout(
-                    child,
-                    node_child,
-                    primitives,
-                    pos,
-                    level,
-                );
+                self.generate_primitives_from_layout(child, node_child, primitives, pos, level);
             }
 
             Knob { id, label, signal } => {
@@ -780,7 +792,10 @@ impl SurfaceEngine {
                         primitives.push(SurfacePrimitive::Curve {
                             id: id_stable,
                             control_points: vec![
-                                [rounded_pos.x + i as f32 * step, center_y - data[i] * scale_y],
+                                [
+                                    rounded_pos.x + i as f32 * step,
+                                    center_y - data[i] * scale_y,
+                                ],
                                 [
                                     rounded_pos.x + (i + 1) as f32 * step,
                                     center_y - data[i + 1] * scale_y,
@@ -815,7 +830,10 @@ impl SurfaceEngine {
                         primitives.push(SurfacePrimitive::Curve {
                             id: id_stable,
                             control_points: vec![
-                                [rounded_pos.x + i as f32 * step, bottom_y - data[i] * scale_y],
+                                [
+                                    rounded_pos.x + i as f32 * step,
+                                    bottom_y - data[i] * scale_y,
+                                ],
                                 [
                                     rounded_pos.x + (i + 1) as f32 * step,
                                     bottom_y - data[i + 1] * scale_y,
